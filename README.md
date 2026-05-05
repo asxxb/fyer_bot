@@ -1,17 +1,17 @@
-# Shoonya Algo Trading Bot
+# FYERS Algo Trading Bot
 
-A professional-grade algorithmic trading bot for Indian stocks using the Shoonya (Finvasia) API. Built with Python, it features live trading, backtesting, risk management, and a beautiful Streamlit dashboard.
+A professional-grade algorithmic trading bot for Indian stocks using the FYERS API v3. Built with Python, it features live trading, backtesting, risk management, and a beautiful FastAPI dashboard.
 
-![Python](https://img.shields.io/badge/Python-3.11+-blue)
+![Python](https://img.shields.io/badge/Python-3.10+-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Features
 
 ### Core Trading
-- **Live Trading** - Real-time order execution via Shoonya API
+- **Live Trading** - Real-time order execution via FYERS API v3
 - **Paper Trading** - Test strategies without real money
-- **Exchange-Side Stop Loss** - SL-M orders that survive bot crashes
-- **Auto-Reconnect** - WebSocket heartbeat monitoring with auto-reconnect
+- **Auto-Reconnect** - REST API polling with automatic retry
+- **OAuth2 Authentication** - Secure login via FYERS
 
 ### Strategy
 - **EMA RSI Scalper** - EMA crossover + RSI filter + ATR stop loss
@@ -20,7 +20,7 @@ A professional-grade algorithmic trading bot for Indian stocks using the Shoonya
 ### Risk Management
 - **Daily Loss Limits** - Auto-stop after reaching max daily loss
 - **Max Trades Per Day** - Configurable trade limits
-- **Consecutive Loss Protection** - Auto-block after 3 consecutive losses
+- **Consecutive Loss Protection** - Auto-block after losses
 
 ### Analytics
 - **Backtesting** - Test strategies on historical data
@@ -34,12 +34,12 @@ A professional-grade algorithmic trading bot for Indian stocks using the Shoonya
 
 | Component | Technology |
 |-----------|------------|
-| Language | Python 3.11+ |
-| API | NorenRestApiPy (Shoonya/Finvasia) |
-| Data | pandas, numpy, yfinance |
+| Language | Python 3.10+ |
+| API | fyers_apiv3 (FYERS API v3) |
+| Data | pandas, numpy, fyers |
 | Analytics | ta (technical analysis) |
-| Dashboard | Streamlit |
-| Charts | Plotly |
+| Dashboard | FastAPI + Uvicorn |
+| Charts | Chart.js |
 | Logging | colorlog |
 
 ## Installation
@@ -48,8 +48,8 @@ A professional-grade algorithmic trading bot for Indian stocks using the Shoonya
 
 ```bash
 cd ~/personal
-git clone https://github.com/yourusername/shoonya_bot.git
-cd shoonya_bot
+git clone https://github.com/yourusername/fyer_bot.git
+cd fyer_bot
 ```
 
 ### 2. Create Virtual Environment
@@ -77,12 +77,11 @@ cp env.example .env
 ### Required Environment Variables
 
 ```bash
-# Shoonya Credentials
-SHOONYA_USER=your_user_id
-SHOONYA_PASSWORD=your_password
-SHOONYA_TOTP_SECRET=your_totp_secret
-SHOONYA_VENDOR_CODE=your_vendor_code
-SHOONYA_API_SECRET=your_api_secret
+# FYERS Credentials
+FYERS_APP_ID=your_app_id
+FYERS_SECRET_ID=your_secret_id
+FYERS_REDIRECT_URI=https://trade.fyers.in/api-login/redirect-uri/index.html
+FYERS_ACCESS_TOKEN=your_access_token
 
 # Trading Parameters
 CAPITAL=1000
@@ -98,19 +97,15 @@ TELEGRAM_CHAT_ID=your_chat_id
 
 ## Usage
 
-### Dashboard (Recommended)
-
-Launch the visual dashboard for trading, scanning, and backtesting:
+### Quick Start with API Dashboard
 
 ```bash
-streamlit run dashboard.py
+python3 main.py --api
 ```
 
-Access at: `http://localhost:8501`
+Access at: `http://localhost:8000`
 
 ### Live Trading
-
-Run the trading bot:
 
 ```bash
 python3 main.py
@@ -118,15 +113,11 @@ python3 main.py
 
 ### Scanner
 
-Run the momentum scanner:
-
 ```bash
-python3 scanner.py
+python3 main.py --scan
 ```
 
 ### Backtest
-
-Test strategies on historical data:
 
 ```bash
 # Fetch and use cached data
@@ -138,8 +129,6 @@ python3 backtest.py --symbol SBIN-EQ --days 10
 
 ### Fetch Data
 
-Download historical candle data:
-
 ```bash
 python3 fetch_data.py --symbol SBIN-EQ
 ```
@@ -147,9 +136,9 @@ python3 fetch_data.py --symbol SBIN-EQ
 ## Project Structure
 
 ```
-shoonya_bot/
+fyer_bot/
 ├── core/                    # Core trading engine
-│   ├── broker.py          # Shoonya API wrapper
+│   ├── broker.py          # FYERS API wrapper
 │   ├── engine.py         # Main trading brain
 │   ├── risk_manager.py  # Risk controls
 │   ├── trade_tracker.py  # Trade journal
@@ -166,12 +155,37 @@ shoonya_bot/
 │   ├── candles_*.csv
 │   ├── trades.csv
 │   └── equity.csv
-├── dashboard.py           # Streamlit dashboard
+├── templates/              # Dashboard HTML
+│   └── dashboard.html
+├── api.py                 # FastAPI server
 ├── main.py               # Live trading entry
 ├── backtest.py           # Backtesting
 ├── scanner.py            # Stock scanner
 └── requirements.txt     # Dependencies
 ```
+
+## FYERS API Setup
+
+### 1. Get API Credentials
+
+1. Login to [FYERS Dashboard](https://dashboard.fyers.in/)
+2. Go to App Management → Create App
+3. Copy your App ID and Secret ID
+4. Set redirect URI
+
+### 2. Generate Access Token
+
+First run:
+```bash
+python3 main.py --login
+```
+
+This will show a URL. Open it in browser, login, then copy the code from redirect URL:
+```bash
+python3 main.py --login <code_from_redirect>
+```
+
+The token will be saved to `.env`.
 
 ## Strategy: EMA RSI Scalper
 
@@ -195,7 +209,7 @@ Edit `config/settings.py` or use environment variables:
 
 | Parameter | Default | Description |
 |----------|---------|-------------|
-| CAPITAL | 1000 | Trading capital (₹) |
+| CAPITAL | 1000 | Trading capital (INR) |
 | RISK_PER_TRADE_PCT | 1.0 | Risk per trade (%) |
 | MAX_TRADES_PER_DAY | 5 | Max trades per day |
 | MAX_LOSS_PER_DAY_PCT | 2.0 | Max daily loss (%) |
@@ -207,23 +221,95 @@ Edit `config/settings.py` or use environment variables:
 | ATR_MULTIPLIER | 1.5 | ATR stop loss multiplier |
 | CANDLE_INTERVAL | 5 | Candle interval (minutes) |
 
+## Server Deployment
+
+### Manual Setup (Any VPS/Server)
+
+```bash
+# SSH to server
+ssh root@your_server_ip
+
+# Clone and setup
+cd /root
+git clone your_repo.git
+cd fyer_bot
+
+# Install dependencies
+pip3 install -r requirements.txt
+
+# Configure
+cp env.example .env
+nano .env  # Add your FYERS credentials
+
+# Run with API dashboard
+python3 main.py --api
+```
+
+### Systemd Service (Recommended)
+
+Create `/etc/systemd/system/fyerbot.service`:
+
+```ini
+[Unit]
+Description=FYERS Trading Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/fyer_bot
+ExecStart=/usr/bin/python3 /root/fyer_bot/main.py --api
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+```bash
+# Enable and start
+systemctl daemon-reload
+systemctl enable fyerbot
+systemctl start fyerbot
+
+# View logs
+journalctl -u fyerbot -f
+
+# Restart after changes
+systemctl restart fyerbot
+```
+
+### Accessing the Dashboard
+
+- Local: `http://localhost:8000`
+- Server: `http://your_server_ip:8000`
+
+### Firewall (if needed)
+
+```bash
+# Allow port 8000
+ufw allow 8000/tcp
+# Or with iptables
+iptables -A INPUT -p tcp --dport 8000 -j ACCEPT
+```
+
 ## Risk Management
 
 The bot automatically:
 - Blocks trading after daily loss limit
-- Blocks trading after 3 consecutive losses
-- Places exchange-side SL-M orders (crash-safe)
-- Cancels SL orders when TP hits
+- Blocks trading after consecutive losses
+- Tracks all positions
+- Cancels orders when TP hits
 
 ## Telegram Notifications
 
 When enabled, you'll receive:
-- ✅ Trade opened
-- 📕 Trade closed
-- 🛑 Stop loss hit
-- 🎯 Target hit
-- ⚠️ WebSocket heartbeat lost
-- ⚠️ Error alerts
+- Trade opened
+- Trade closed
+- Stop loss hit
+- Target hit
+- Error alerts
 
 ## Data Files
 
@@ -238,43 +324,38 @@ When enabled, you'll receive:
 
 ### Import Errors
 ```bash
-# Ensure virtual environment is activated
-source venv/bin/activate
-
 # Reinstall dependencies
 pip install -r requirements.txt
 ```
 
-### Shoonya API Issues
+### FYERS API Issues
 - Verify credentials in `.env`
-- Check TOTP secret is correct
+- Regenerate access token: `python3 main.py --login`
 - Ensure market is open (IST 9:15 AM - 3:30 PM)
-
-### WebSocket Issues
-- Check internet connection
-- Verify API credentials
-- Restart the bot
 
 ### Dashboard Issues
 ```bash
-# Clear Streamlit cache
-streamlit clear cache
+# Check if port is in use
+sudo ss -tlnp | grep 8000
 
-# Or run with fresh port
-streamlit run dashboard.py --server.port 8502
+# Restart service
+systemctl restart fyerbot
 ```
 
 ## Safety Features
 
-⚠️ **Always use paper trading first**
+Always use paper trading first:
+
+```bash
+# In .env
+PAPER_TRADE=true
+```
 
 The bot includes multiple safety layers:
 1. Paper trading mode (default)
 2. Daily loss limits
 3. Max trades per day
 4. Consecutive loss protection
-5. Exchange-side stop losses
-6. WebSocket heartbeat monitoring
 
 ## License
 
@@ -286,4 +367,4 @@ This software is for educational purposes. Trading stocks involves substantial r
 
 ---
 
-**Happy Trading! 🚀**
+**Happy Trading!**
