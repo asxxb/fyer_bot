@@ -1,0 +1,41 @@
+#!/bin/bash
+# Bot control script for FYERS Trading Bot
+
+SERVER="root@160.250.204.140"
+PASS="5jAfWI4PeyHK"
+
+cmd="${1:-status}"
+case "$cmd" in
+  start)
+    echo "Starting bot..."
+    sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$SERVER" "systemctl start fyerbot.service"
+    ;;
+  stop)
+    echo "Stopping bot..."
+    sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$SERVER" "systemctl stop fyerbot.service"
+    ;;
+  restart)
+    echo "Restarting bot..."
+    sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$SERVER" "systemctl restart fyerbot.service"
+    ;;
+  status)
+    sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$SERVER" "systemctl status fyerbot.service | head -10"
+    ;;
+  logs)
+    sshpass -p "$PASS" ssh -o StrictHostKeyChecking=no "$SERVER" "journalctl -u fyerbot.service -f --no-pager"
+    ;;
+  dash)
+    echo "Opening dashboard..."
+    open http://160.250.204.140:8000/
+    ;;
+  *)
+    echo "Usage: botctl {start|stop|restart|status|logs|dash}"
+    echo ""
+    echo "  start   - Start the bot"
+    echo "  stop    - Stop the bot"
+    echo " restart - Restart the bot"
+    echo " status  - Check bot status"
+    echo " logs   - View live logs"
+    echo " dash   - Open dashboard"
+    ;;
+esac

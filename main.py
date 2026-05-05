@@ -94,11 +94,21 @@ def run_api():
         from core.engine import TradingEngine
         engine = TradingEngine()
         _write_status("RUNNING", settings.SYMBOL)
+
+        # Send telegram start message
+        telegram.send(
+            "🤖 *Algo Bot Started*\n\n"
+            f"Mode: {'🟡 PAPER' if settings.PAPER_TRADE else '🔴 LIVE'}\n"
+            f"Capital: ₹{settings.CAPITAL:,.0f}\n"
+            f"Symbol: {settings.SYMBOL}\n"
+            "Status: RUNNING"
+        )
         
         try:
             engine.start()
         except Exception as e:
             _write_status("STOPPED", None)
+            telegram.send(f"❌ *Bot Crashed*\n\n{str(e)}")
             log.error(f"Bot crashed: {e}")
     
     bot_thread = threading.Thread(target=run_bot_thread, daemon=True)

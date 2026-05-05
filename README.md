@@ -223,6 +223,27 @@ Edit `config/settings.py` or use environment variables:
 
 ## Server Deployment
 
+### Bot Control Script
+
+Once deployed, use the `botctl` script to control the bot:
+
+```bash
+botctl start    # Start the bot
+botctl stop     # Stop the bot
+botctl restart  # Restart the bot
+botctl status   # Check status
+botctl logs    # View live logs
+botctl dash    # Open dashboard in browser
+```
+
+Examples:
+```bash
+./botctl stop
+./botctl status
+./botctl start
+./botctl logs
+```
+
 ### Manual Setup (Any VPS/Server)
 
 ```bash
