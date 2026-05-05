@@ -313,6 +313,133 @@ async def get_profile():
         return {"success": False, "error": str(e)}
 
 
+@app.get("/api/system")
+async def get_system():
+    """Get server system specifications."""
+    try:
+        import os
+        import platform
+        
+        # Get system info
+        hostname = platform.node()
+        os_info = platform.platform()
+        
+        # CPU cores
+        cpu_cores = os.cpu_count()
+        
+        # Memory info
+        with open('/proc/meminfo') as f:
+            mem = {}
+            for line in f:
+                if ':' in line:
+                    key, val = line.split(':', 1)
+                    key = key.strip()
+                    val = val.strip().split()[0] if val.strip() else '0'
+                    try:
+                        mem[key] = int(val)
+                    except:
+                        mem[key] = 0
+        
+        mem_total_kb = mem.get('MemTotal', 0)
+        mem_free_kb = mem.get('MemFree', 0)
+        mem_available_kb = mem.get('MemAvailable', 0)
+        
+        def kb_to_gb(kb):
+            return f"{kb / 1024 / 1024:.1f} GB"
+        
+        # Disk info
+        stat = os.statvfs('/')
+        disk_total = stat.f_blocks * stat.f_frsize
+        disk_free = stat.f_bavail * stat.f_frsize
+        
+        def bytes_to_gb(b):
+            return f"{b / 1024 / 1024 / 1024:.1f} GB"
+        
+        # Uptime
+        with open('/proc/uptime') as f:
+            uptime_seconds = float(f.read().split()[0])
+            days = int(uptime_seconds // 86400)
+            hours = int((uptime_seconds % 86400) // 3600)
+            minutes = int((uptime_seconds % 3600) // 60)
+            uptime = f"{days}d {hours}h {minutes}m"
+        
+        return {
+            "success": True,
+            "hostname": hostname,
+            "os": os_info,
+            "uptime": uptime,
+            "cpu_cores": cpu_cores,
+            "mem_total": kb_to_gb(mem_total_kb),
+            "mem_free": kb_to_gb(mem_free_kb),
+            "mem_available": kb_to_gb(mem_available_kb),
+            "disk_total": bytes_to_gb(disk_total),
+            "disk_free": bytes_to_gb(disk_free),
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/config")
+async def get_config():
+    """Get current bot configuration."""
+    try:
+        from config import settings
+        
+        return {
+            "success": True,
+            "mode": "PAPER" if settings.PAPER_TRADE else "LIVE",
+            "capital": f"₹{settings.CAPITAL:,}",
+            "symbol": settings.SYMBOL,
+            "exchange": settings.EXCHANGE,
+            "risk_per_trade": f"{settings.RISK_PER_TRADE_PCT}%",
+            "max_trades": settings.MAX_TRADES_PER_DAY,
+            "max_loss": f"{settings.MAX_LOSS_PER_DAY_PCT}%",
+            "ema_fast": settings.EMA_FAST,
+            "ema_slow": settings.EMA_SLOW,
+            "rsi_period": settings.RSI_PERIOD,
+            "candle_interval": f"{settings.CANDLE_INTERVAL}m",
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/cron")
+async def get_cron():
+    """Get cron job status."""
+    try:
+        import subprocess
+        
+        result = subprocess.run(
+            ['crontab', '-l'],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            return {"success": True, "jobs": []}
+        
+        lines = result.stdout.strip().split('\n')
+        jobs = []
+        
+        for line in lines:
+            if line.strip() and not line.startswith('#'):
+                parts = line.split()
+                if len(parts) >= 5:
+                    jobs.append({
+                        "time": parts[0] + " " + parts[1],
+                        "day": parts[2] + " " + parts[3] + " " + parts[4],
+                        "command": " ".join(parts[5:]),
+                        "status": "active"
+                    })
+        
+        return {"success": True, "jobs": jobs}
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @app.get("/api/trade")
 async def get_trade():
     """

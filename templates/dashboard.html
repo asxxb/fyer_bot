@@ -445,6 +445,7 @@
         <div class="tabs">
             <button class="tab active" data-tab="overview">Overview</button>
             <button class="tab" data-tab="profile">My Profile</button>
+            <button class="tab" data-tab="system">System Info</button>
             <button class="tab" data-tab="scanner">Momentum Scanner</button>
             <button class="tab" data-tab="data">Fetch Data</button>
             <button class="tab" data-tab="backtest">Run Backtest</button>
@@ -571,6 +572,34 @@
                 <div id="profile-data">
                     <p style="color: var(--muted); text-align: center; padding: 1rem;">
                         Loading profile...
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Info Tab -->
+        <div class="tab-content" id="tab-system">
+            <div class="card">
+                <div class="card-title">Server Specifications</div>
+                <div id="system-specs">
+                    <p style="color: var(--muted); text-align: center; padding: 1rem;">
+                        Loading system info...
+                    </p>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Bot Configuration</div>
+                <div id="bot-config">
+                    <p style="color: var(--muted); text-align: center; padding: 1rem;">
+                        Loading config...
+                    </p>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Cron Schedule</div>
+                <div id="cron-status">
+                    <p style="color: var(--muted); text-align: center; padding: 1rem;">
+                        Loading cron...
                     </p>
                 </div>
             </div>
@@ -1008,6 +1037,13 @@
             loadProfile();
         });
 
+        // System Tab click handler
+        document.querySelector('[data-tab="system"]').addEventListener('click', function() {
+            loadSystemInfo();
+            loadBotConfig();
+            loadCronStatus();
+        });
+
         async function loadProfile() {
             try {
                 const res = await fetch('/api/profile');
@@ -1031,6 +1067,99 @@
                 `;
             } catch (error) {
                 console.error('Profile load failed:', error);
+            }
+        }
+
+        async function loadSystemInfo() {
+            try {
+                const res = await fetch('/api/system');
+                const data = await res.json();
+                const container = document.getElementById('system-specs');
+                
+                if (!data.success) {
+                    container.innerHTML = '<p style="color: var(--accent-red);">Error loading system info</p>';
+                    return;
+                }
+                
+                container.innerHTML = `
+                    <table class="trades-table">
+                        <tr><td>Server</td><td>${data.hostname || '-'}</td></tr>
+                        <tr><td>OS</td><td>${data.os || '-'}</td></tr>
+                        <tr><td>Uptime</td><td>${data.uptime || '-'}</td></tr>
+                        <tr><td>CPU Cores</td><td>${data.cpu_cores || '-'}</td></tr>
+                        <tr><td>Memory Total</td><td>${data.mem_total || '-'}</td></tr>
+                        <tr><td>Memory Free</td><td>${data.mem_free || '-'}</td></tr>
+                        <tr><td>Disk Total</td><td>${data.disk_total || '-'}</td></tr>
+                        <tr><td>Disk Free</td><td>${data.disk_free || '-'}</td></tr>
+                    </table>
+                `;
+            } catch (error) {
+                console.error('System info load failed:', error);
+            }
+        }
+
+        async function loadBotConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const data = await res.json();
+                const container = document.getElementById('bot-config');
+                
+                if (!data.success) {
+                    container.innerHTML = '<p style="color: var(--accent-red);">Error loading config</p>';
+                    return;
+                }
+                
+                container.innerHTML = `
+                    <table class="trades-table">
+                        <tr><td>Mode</td><td>${data.mode || '-'}</td></tr>
+                        <tr><td>Capital</td><td>${data.capital || '-'}</td></tr>
+                        <tr><td>Symbol</td><td>${data.symbol || '-'}</td></tr>
+                        <tr><td>Exchange</td><td>${data.exchange || '-'}</td></tr>
+                        <tr><td>Risk/Trade</td><td>${data.risk_per_trade || '-'}</td></tr>
+                        <tr><td>Max Trades/Day</td><td>${data.max_trades || '-'}</td></tr>
+                        <tr><td>Max Loss/Day</td><td>${data.max_loss || '-'}</td></tr>
+                        <tr><td>EMA Fast</td><td>${data.ema_fast || '-'}</td></tr>
+                        <tr><td>EMA Slow</td><td>${data.ema_slow || '-'}</td></tr>
+                        <tr><td>RSI Period</td><td>${data.rsi_period || '-'}</td></tr>
+                        <tr><td>Candle Interval</td><td>${data.candle_interval || '-'}</td></tr>
+                    </table>
+                `;
+            } catch (error) {
+                console.error('Config load failed:', error);
+            }
+        }
+
+        async function loadCronStatus() {
+            try {
+                const res = await fetch('/api/cron');
+                const data = await res.json();
+                const container = document.getElementById('cron-status');
+                
+                if (!data.success) {
+                    container.innerHTML = '<p style="color: var(--accent-red);">Error loading cron</p>';
+                    return;
+                }
+                
+                const jobs = data.jobs || [];
+                if (jobs.length === 0) {
+                    container.innerHTML = '<p style="color: var(--muted);">No cron jobs configured</p>';
+                    return;
+                }
+                
+                container.innerHTML = `
+                    <table class="trades-table">
+                        ${jobs.map(j => `
+                            <tr>
+                                <td>${j.time}</td>
+                                <td>${j.day}</td>
+                                <td>${j.command}</td>
+                                <td style="color: ${j.status === 'active' ? 'var(--accent)' : 'var(--muted)'}">${j.status}</td>
+                            </tr>
+                        `).join('')}
+                    </table>
+                `;
+            } catch (error) {
+                console.error('Cron load failed:', error);
             }
         }
 
