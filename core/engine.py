@@ -182,14 +182,9 @@ class TradingEngine:
 
         if not self.broker.websocket_alive():
             log.warning(
-                "WebSocket heartbeat lost"
+                "WebSocket heartbeat lost - using REST API fallback"
             )
-            telegram.send(
-                "⚠️ WebSocket heartbeat lost"
-            )
-            # Attempt reconnection
-            self.broker.reconnect_websocket()
-            return
+            # Continue using REST API - no reconnection attempted to avoid loop
 
         # -----------------------------------------
         # TRADING HOURS CHECK

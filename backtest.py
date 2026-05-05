@@ -232,76 +232,42 @@ def run_backtest(
 
     # ---------------------------------------------------------
     # RESULTS
-    # ---------------------------------------------------------
+# ---------------------------------------------------------
 
     results = pd.DataFrame(trades)
 
+    # Check if trades generated
+    if results.empty:
+        log.info("No trades generated in backtest.")
+        # Write empty status
+        status_data = {
+            "bot_status": "RUNNING",
+            "capital": float(capital),
+            "daily_pnl": 0.0,
+            "active_trade": "NONE",
+            "last_update": str(datetime.now())
+        }
+        with open("data/status.json", "w") as f:
+            json.dump(status_data, f, indent=4)
+        return
+
     status_data = {
-    "bot_status": "RUNNING",
-    "capital": float(capital),
-    "daily_pnl": float(results['pnl'].sum()),
-    "active_trade": "NONE",
-    "last_update": str(datetime.now())
+        "bot_status": "RUNNING",
+        "capital": float(capital),
+        "daily_pnl": float(results['pnl'].sum()),
+        "active_trade": "NONE",
+        "last_update": str(datetime.now())
     }
 
     with open("data/status.json", "w") as f:
         json.dump(status_data, f, indent=4)
 
-    if results.empty:
-        log.info("No trades generated in backtest.")
-        return
+    # ---------------------------------------------------------
+    # Calculate Metrics
+    # ---------------------------------------------------------
 
     wins = results[results["pnl"] > 0]
-
     losses = results[results["pnl"] <= 0]
-
-    print("\n" + "="*55)
-
-    print(f"  BACKTEST RESULTS — {symbol}")
-
-    print("="*55)
-
-    print(f"  Candles    : {len(df)}")
-
-    print(f"  Trades     : {len(results)}")
-
-    print(f"  Win Rate   : {len(wins)/len(results)*100:.1f}%")
-
-    print(
-        f"  Avg Win    : ₹{wins['pnl'].mean():.2f}"
-        if not wins.empty
-        else "  Avg Win    : N/A"
-    )
-
-    print(
-        f"  Avg Loss   : ₹{losses['pnl'].mean():.2f}"
-        if not losses.empty
-        else "  Avg Loss   : N/A"
-    )
-
-    print(f"  Total PnL  : ₹{results['pnl'].sum():.2f}")
-
-    print(f"  Start Cap  : ₹{initial_capital:.2f}")
-
-    print(f"  End Cap    : ₹{capital:.2f}")
-
-    print(
-        f"  Return     : "
-        f"{((capital-initial_capital)/initial_capital*100):.1f}%"
-    )
-
-    print("="*55)
-
-    print("\nLast 10 trades:")
-
-    print(results.tail(10).to_string(index=False))
-    # ---------------------------------------------------------
-    # TELEGRAM SUMMARY
-    # ---------------------------------------------------------
-
-    # ---------------------------------------------------------
-    # TELEGRAM SUMMARY
-    # ---------------------------------------------------------
 
     profit_factor = (
         wins["pnl"].sum() / abs(losses["pnl"].sum())

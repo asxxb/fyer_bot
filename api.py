@@ -448,52 +448,77 @@ async def get_current_stock():
 
 @app.post("/api/fetch-data")
 async def fetch_stock_data(request: Request):
-    """Fetch stock data via yfinance."""
-    from datetime import datetime
-    
+    """Fetch stock data via FYERS API."""
     try:
         body = await request.json()
         stock = body.get("stock", "SBIN")
     except:
         stock = "SBIN"
     
+    # Get token directly from .env
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+    access_token = os.getenv('FYERS_ACCESS_TOKEN', '')
+    app_id = os.getenv('FYERS_APP_ID', '')
+    
+    if not access_token or not app_id:
+        return {"success": False, "error": "Missing FYERS credentials"}
+    
     try:
-        import yfinance as yf
+        from fyers_apiv3 import fyersModel
         
-        symbol = f"{stock.upper()}.NS"
-        
-        df = yf.download(
-            symbol,
-            interval="5m",
-            period="1mo",
-            progress=False
+        # Init fyers directly with token
+        fyers = fyersModel.FyersModel(
+            client_id=app_id,
+            is_async=False,
+            token=access_token,
+            log_path=''
         )
         
-        if df.empty:
-            return {"success": False, "error": "No data fetched"}
+        profile = fyers.get_profile()
+        if profile.get('s') != 'ok':
+            return {"success": False, "error": f"FYERS auth failed"}
         
-        # Handle multiindex columns
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
+        symbol = f"{stock.upper()}-EQ"
         
-        df = df.reset_index()
-        df = df.rename(columns={
-            "Datetime": "datetime",
-            "Open": "open",
-            "High": "high",
-            "Low": "low",
-            "Close": "close",
-            "Volume": "volume"
+        # Fetch candles using fyers directly
+        from datetime import datetime, timedelta
+        end_dt = datetime.now()
+        start_dt = end_dt - timedelta(days=1)
+        
+        response = fyers.history({
+            "symbol": f"NSE:{symbol}",
+            "resolution": "5",
+            "date_format": "1",
+            "range_from": start_dt.strftime("%Y-%m-%d"),
+            "range_to": end_dt.strftime("%Y-%m-%d"),
+            "cont_flag": "1"
         })
         
-        required = ["datetime", "open", "high", "low", "close", "volume"]
-        if not all(c in df.columns for c in required):
-            return {"success": False, "error": "Missing columns"}
+        if response.get("s") != "ok":
+            return {"success": False, "error": f"History API error: {response}"}
         
-        for col in required[1:]:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
+        candles = response.get("candles", [])
+        if not candles:
+            return {"success": False, "error": "No candles returned"}
         
-        df = df.dropna(subset=required)
+        # Convert to DataFrame
+        import pandas as pd
+        rows = []
+        for c in candles:
+            rows.append({
+                "datetime": datetime.fromtimestamp(c[0]),
+                "open": float(c[1]),
+                "high": float(c[2]),
+                "low": float(c[3]),
+                "close": float(c[4]),
+                "volume": int(c[5]) if len(c) > 5 else 0,
+            })
+        
+        df = pd.DataFrame(rows)
+        df = df.sort_values("datetime")
+        df = df.reset_index(drop=True)
         
         # Save to CSV
         filename = _get_data_dir() / f"candles_{stock.upper()}_EQ.csv"
@@ -501,8 +526,8 @@ async def fetch_stock_data(request: Request):
         
         return {"success": True, "candles": len(df)}
         
-    except ImportError:
-        return {"success": False, "error": "yfinance not installed"}
+    except ImportError as e:
+        return {"success": False, "error": f"Import error: {e}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 

@@ -111,7 +111,7 @@ class FyersBroker:
                     
                     log.info(f"Access token saved")
                 else:
-                    log.error(f"❌ Token generation failed: {response}")
+                    log.error(f"Token generation failed: {response}")
                     return False
             else:
                 self.session.set_token(self.access_token)
@@ -127,11 +127,13 @@ class FyersBroker:
             
             if profile.get("s") == "ok":
                 self.logged_in = True
-                log.info("✅ Login successful")
+                log.info("Login successful")
                 log.info(f"Profile: {profile.get('d', {}).get('name', 'User')}")
+                # Skip WebSocket - use REST API for quotes
+                log.info("Using REST API for market data")
                 return True
             else:
-                log.error(f"❌ Profile fetch failed: {profile}")
+                log.error(f"Profile fetch failed: {profile}")
                 return False
 
         except ImportError:
@@ -144,49 +146,48 @@ class FyersBroker:
             return False
 
     def _start_websocket(self):
+        # WebSocket disabled - using REST API instead
+        log.info("WebSocket disabled - using REST API")
+        return
 
+    def reconnect_websocket(self):
+        from utils.telegram import telegram
+        
+        if self.reconnecting:
+            log.warning("Reconnection already in progress")
+            return False
+        
+        self.reconnecting = True
+        log.warning("Attempting WebSocket reconnection...")
+        
+        telegram.send("Reconnecting WebSocket...")
+        
         try:
-            ws_url = FYERS_WS_URL
-
-            def on_message(ws, message):
+            if self.ws:
                 try:
-                    data = json.loads(message)
-                    self._handle_tick(data)
+                    self.ws.close()
                 except:
                     pass
-
-            def on_open(ws):
-                log.info("✅ FYERS WebSocket connected")
-                self.websocket_connected = True
-                self._subscribe_watchlist()
-
-            def on_close(ws):
-                log.warning("⚠️ FYERS WebSocket disconnected")
-                self.websocket_connected = False
-
-            def on_error(ws, error):
-                log.error(f"WebSocket error: {error}")
-
-            self.ws = websocket.WebSocketApp(
-                ws_url,
-                on_message=on_message,
-                on_open=on_open,
-                on_close=on_close,
-                on_error=on_error,
-                header={"Authorization": f"{self.app_id}:{self.access_token}"}
-            )
-
-            def run_ws():
-                self.ws.run_forever(ping_interval=30)
-
-            import threading
-            self.ws_thread = threading.Thread(target=run_ws, daemon=True)
-            self.ws_thread.start()
-
-            time.sleep(3)
-
+            time.sleep(2)
+            
+            self._start_websocket()
+            time.sleep(5)
+            
+            if self.websocket_connected:
+                log.info("WebSocket reconnected")
+                telegram.send("WebSocket Reconnected")
+                self.reconnecting = False
+                return True
+            else:
+                log.warning("WebSocket connection pending - will retry next tick")
+                self.reconnecting = False
+                return False
+                
         except Exception as e:
-            log.error(f"WebSocket start error: {e}")
+            log.error(f"Reconnection failed: {e}")
+            telegram.send(f"WebSocket reconnect failed: {e}")
+            self.reconnecting = False
+            return False
 
     def _handle_tick(self, tick_data):
 
@@ -229,9 +230,8 @@ class FyersBroker:
         return tick.get("ltp")
 
     def websocket_alive(self) -> bool:
-
-        diff = (datetime.now(IST) - self.last_tick_time).seconds
-        return diff < 30
+        # Using REST API - always return True
+        return True
 
     def get_quote(self, symbol: str = None, exchange: str = None) -> Optional[dict]:
 
