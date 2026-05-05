@@ -1,0 +1,62 @@
+{
+  "IREDA-EQ": {
+    "expectancy": 2.1,
+    "trades": 45,
+    "win_rate": 0.62,
+    "profit_factor": 1.8
+  },
+  "IRFC-EQ": {
+    "expectancy": 1.5,
+    "trades": 32,
+    "win_rate": 0.58,
+    "profit_factor": 1.5
+  },
+  "SUZLON-EQ": {
+    "expectancy": 1.2,
+    "trades": 28,
+    "win_rate": 0.55,
+    "profit_factor": 1.4
+  },
+  "RVNL-EQ": {
+    "expectancy": 0.5,
+    "trades": 35,
+    "win_rate": 0.48,
+    "profit_factor": 1.1
+  },
+  "IDFCFIRSTB-EQ": {
+    "expectancy": -0.5,
+    "trades": 50,
+    "win_rate": 0.42,
+    "profit_factor": 0.85
+  },
+  "SBIN-EQ": {
+    "expectancy": 0.8,
+    "trades": 40,
+    "win_rate": 0.52,
+    "profit_factor": 1.2
+  },
+  "NHPC-EQ": {
+    "expectancy": 0.6,
+    "trades": 25,
+    "win_rate": 0.50,
+    "profit_factor": 1.1
+  },
+  "NBCC-EQ": {
+    "expectancy": 0.4,
+    "trades": 22,
+    "win_rate": 0.48,
+    "profit_factor": 1.05
+  },
+  "PNB-EQ": {
+    "expectancy": -0.3,
+    "trades": 38,
+    "win_rate": 0.45,
+    "profit_factor": 0.92
+  },
+  "UCOBANK-EQ": {
+    "expectancy": -0.2,
+    "trades": 30,
+    "win_rate": 0.44,
+    "profit_factor": 0.95
+  }
+}

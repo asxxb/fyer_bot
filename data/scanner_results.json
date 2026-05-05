@@ -1,0 +1,41 @@
+{
+  "last_scan": "2026-05-04 23:04:20",
+  "results": [
+    {
+      "symbol": "RVNL",
+      "close": 298.1,
+      "rsi": 69.43,
+      "rel_volume": 2.21,
+      "change_pct": 0.97,
+      "trend_strength": 0.0022,
+      "score": 10
+    },
+    {
+      "symbol": "SUZLON",
+      "close": 54.88,
+      "rsi": 54.65,
+      "rel_volume": 2.44,
+      "change_pct": 0.42,
+      "trend_strength": 0.0002,
+      "score": 8
+    },
+    {
+      "symbol": "IREDA",
+      "close": 135.56,
+      "rsi": 62.92,
+      "rel_volume": 2.49,
+      "change_pct": 0.31,
+      "trend_strength": 0.0013,
+      "score": 7
+    },
+    {
+      "symbol": "IRFC",
+      "close": 104.59,
+      "rsi": 65.18,
+      "rel_volume": 4.11,
+      "change_pct": 0.48,
+      "trend_strength": 0.0014,
+      "score": 7
+    }
+  ]
+}

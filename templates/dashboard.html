@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shoonya Trading Bot</title>
+    <style>
+        :root {
+            --bg-deep: #070d18;
+            --bg-soft: #0b1220;
+            --card: #111a2b;
+            --ink: #e5edf8;
+            --muted: #9aabc3;
+            --accent: #34d399;
+            --accent-red: #f87171;
+            --accent-yellow: #fbbf24;
+            --border: #22324a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: radial-gradient(circle at 15% 10%, #162038 0%, var(--bg-soft) 45%, var(--bg-deep) 100%);
+            color: var(--ink);
+            min-height: 100vh;
+            padding: 1rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding: 0.75rem 1rem;
+            background: linear-gradient(120deg, #16243b, #101a2d);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+        }
+
+        .header h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--ink);
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-red);
+        }
+
+        .status-dot.connected {
+            background: var(--accent);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 2px;
+            background: rgba(17, 26, 43, 0.7);
+            border: 1px solid var(--border);
+            padding: 4px;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+        }
+
+        .tab {
+            padding: 0.5rem 1rem;
+            background: transparent;
+            color: var(--muted);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .tab.active {
+            color: var(--ink);
+            background: #1a2a42;
+            border-bottom: 2px solid var(--accent);
+        }
+
+        .tab:hover {
+            color: var(--ink);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Grid Layout */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.75rem;
+        }
+
+        .card-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--ink);
+        }
+
+        .card-value.positive {
+            color: var(--accent);
+        }
+
+        .card-value.negative {
+            color: var(--accent-red);
+        }
+
+        .card-value.small {
+            font-size: 1rem;
+        }
+
+        .card-sub {
+            font-size: 0.75rem;
+            color: var(--muted);
+            margin-top: 0.25rem;
+        }
+
+        /* Mode Badge */
+        .mode-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .mode-badge.paper {
+            background: rgba(251, 191, 36, 0.15);
+            color: var(--accent-yellow);
+            border: 1px solid var(--accent-yellow);
+        }
+
+        .mode-badge.live {
+            background: rgba(248, 113, 113, 0.15);
+            color: var(--accent-red);
+            border: 1px solid var(--accent-red);
+        }
+
+        /* Trade Card */
+        .trade-info {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .trade-row {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .trade-label {
+            color: var(--muted);
+        }
+
+        .trade-value {
+            font-weight: 600;
+        }
+
+        .trade-value.buy {
+            color: var(--accent);
+        }
+
+        .trade-value.sell {
+            color: var(--accent-red);
+        }
+
+        /* No Trade State */
+        .no-trade {
+            color: var(--muted);
+            font-size: 0.875rem;
+            text-align: center;
+            padding: 1rem;
+        }
+
+        /* Trades Table */
+        .trades-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        .trades-table th {
+            text-align: left;
+            padding: 0.5rem;
+            color: var(--muted);
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .trades-table td {
+            padding: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .trades-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .pnl-positive {
+            color: var(--accent);
+        }
+
+        .pnl-negative {
+            color: var(--accent-red);
+        }
+
+        /* Metrics Grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+        }
+
+        .metric-item {
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 1.125rem;
+            font-weight: 700;
+        }
+
+        .metric-label {
+            font-size: 0.7rem;
+            color: var(--muted);
+        }
+
+        /* Equity Chart */
+        .chart-container {
+            height: 100px;
+            background: #0f1728;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.5rem;
+        }
+
+        .chart-container canvas {
+            max-height: 90px;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .toggle {
+            width: 40px;
+            height: 20px;
+            background: #22324a;
+            border-radius: 10px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .toggle.active {
+            background: var(--accent);
+        }
+
+        .toggle::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: left 0.3s;
+        }
+
+        .toggle.active::after {
+            left: 22px;
+        }
+
+        .toggle-label {
+            font-size: 0.875rem;
+        }
+
+        /* Scanner */
+        .scanner-results {
+            font-size: 0.8rem;
+        }
+
+        .scanner-results table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .scanner-results th,
+        .scanner-results td {
+            padding: 0.5rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .scanner-results th {
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        /* Form controls */
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .form-group select {
+            width: 100%;
+            padding: 0.5rem;
+            background: #0f1728;
+            color: var(--ink);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            background: linear-gradient(135deg, #1b2c48, #1f365a);
+            color: #e9f1ff;
+            border: 1px solid #35527a;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+
+        .btn:hover {
+            border-color: #4f79ad;
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Output */
+        .output {
+            background: #0f1728;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.75rem;
+            font-family: monospace;
+            font-size: 0.75rem;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 0.5rem;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--muted);
+            margin-top: 1rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🚀 Shoonya Trading Bot</h1>
+            <div class="connection-status">
+                <span class="status-dot" id="ws-status"></span>
+                <span id="connection-text">Disconnected</span>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" data-tab="overview">Overview</button>
+            <button class="tab" data-tab="scanner">Momentum Scanner</button>
+            <button class="tab" data-tab="data">Fetch Data</button>
+            <button class="tab" data-tab="backtest">Run Backtest</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div class="tab-content active" id="tab-overview">
+            <!-- Top Metrics -->
+            <div class="grid">
+                <!-- Mode -->
+                <div class="card">
+                    <div class="card-title">Mode</div>
+                    <div id="mode-display">
+                        <span class="mode-badge paper" id="mode-badge">PAPER</span>
+                    </div>
+                    <div class="card-sub" style="margin-top: 0.5rem;">
+                        <div class="toggle-container">
+                            <div class="toggle" id="mode-toggle"></div>
+                            <span class="toggle-label">Paper Trade</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live PnL -->
+                <div class="card">
+                    <div class="card-title">Live P&L</div>
+                    <div class="card-value" id="live-pnl">
+                        ₹0.00
+                    </div>
+                    <div class="card-sub" id="trades-today">0 trades today</div>
+                </div>
+
+                <!-- Current Stock (Best stock being considered) -->
+                <div class="card">
+                    <div class="card-title">Current Stock</div>
+                    <div id="current-stock">
+                        <div class="no-trade">Scanning...</div>
+                    </div>
+                </div>
+
+                <!-- Active Trade -->
+                <div class="card">
+                    <div class="card-title">Active Trade</div>
+                    <div id="active-trade">
+                        <div class="no-trade">No open trade</div>
+                    </div>
+                </div>
+
+                <!-- Risk Summary -->
+                <div class="card">
+                    <div class="card-title">Risk Summary</div>
+                    <div class="card-value small" id="risk-limit">
+                        -₹20.00
+                    </div>
+                    <div class="card-sub" id="risk-status">Daily Limit</div>
+                </div>
+            </div>
+
+            <!-- Performance + Equity Row -->
+            <div class="grid" style="grid-template-columns: 2fr 2fr;">
+                <!-- Performance Metrics -->
+                <div class="card">
+                    <div class="card-title">Performance Metrics</div>
+                    <div class="metrics-grid" id="metrics">
+                        <div class="metric-item">
+                            <div class="metric-value" id="metric-trades">0</div>
+                            <div class="metric-label">Total Trades</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value" id="metric-winrate">0%</div>
+                            <div class="metric-label">Win Rate</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value" id="metric-pnl">₹0</div>
+                            <div class="metric-label">Total P&L</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value" id="metric-pf">0.0</div>
+                            <div class="metric-label">Profit Factor</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Equity Chart -->
+                <div class="card">
+                    <div class="card-title">Equity Curve</div>
+                    <div class="chart-container">
+                        <canvas id="equity-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Trades -->
+            <div class="card">
+                <div class="card-title">Recent Trades</div>
+                <table class="trades-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Symbol</th>
+                            <th>Side</th>
+                            <th>Qty</th>
+                            <th>Entry</th>
+                            <th>Exit</th>
+                            <th>P&L</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trades-body">
+                        <tr>
+                            <td colspan="8" style="text-align: center; color: var(--muted);">
+                                No trades yet
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Scanner Tab -->
+        <div class="tab-content" id="tab-scanner">
+            <div class="card">
+                <div class="card-title">Momentum Scanner</div>
+                <div class="scanner-results" id="scanner-results">
+                    <p style="color: var(--muted); text-align: center; padding: 1rem;">
+                        Scanner results not available. Run scanner from bot.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fetch Data Tab -->
+        <div class="tab-content" id="tab-data">
+            <div class="card">
+                <div class="card-title">Fetch Stock Data</div>
+                <div class="controls">
+                    <div class="form-group">
+                        <label>Select Stock</label>
+                        <select id="stock-select">
+                            <option value="SBIN">SBIN</option>
+                            <option value="NHPC">NHPC</option>
+                            <option value="SUZLON">SUZLON</option>
+                            <option value="YESBANK">YESBANK</option>
+                            <option value="IDFCFIRSTB">IDFCFIRSTB</option>
+                            <option value="UCOBANK">UCOBANK</option>
+                            <option value="IREDA">IREDA</option>
+                            <option value="RVNL">RVNL</option>
+                            <option value="NBCC">NBCC</option>
+                            <option value="IRFC">IRFC</option>
+                        </select>
+                    </div>
+                    <button class="btn" id="fetch-btn">Fetch Data</button>
+                    <div class="output" id="fetch-output">Select a stock and click Fetch Data</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Backtest Tab -->
+        <div class="tab-content" id="tab-backtest">
+            <div class="card">
+                <div class="card-title">Run Backtest</div>
+                <div class="controls">
+                    <div class="form-group">
+                        <label>Select Stock</label>
+                        <select id="backtest-stock">
+                            <option value="SBIN">SBIN</option>
+                            <option value="NHPC">NHPC</option>
+                            <option value="SUZLON">SUZLON</option>
+                            <option value="YESBANK">YESBANK</option>
+                            <option value="IDFCFIRSTB">IDFCFIRSTB</option>
+                            <option value="UCOBANK">UCOBANK</option>
+                            <option value="IREDA">IREDA</option>
+                            <option value="RVNL">RVNL</option>
+                            <option value="NBCC">NBCC</option>
+                            <option value="IRFC">IRFC</option>
+                        </select>
+                    </div>
+                    <button class="btn" id="backtest-btn">Run Backtest</button>
+                    <div class="output" id="backtest-output">Select a stock and click Run Backtest</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            Last updated: <span id="last-update">--</span>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        // Format INR
+        function formatINR(value) {
+            const num = parseFloat(value) || 0;
+            const sign = num >= 0 ? '₹' : '-₹';
+            return sign + Math.abs(num).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // Format time
+        function formatTime(isoString) {
+            if (!isoString) return '--';
+            try {
+                const date = new Date(isoString);
+                return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            } catch {
+                return '--';
+            }
+        }
+
+        // Update Status
+        async function updateStatus() {
+            try {
+                const response = await fetch('/api/status', { 
+                    signal: AbortSignal.timeout(5000) 
+                });
+                
+                if (!response.ok) throw new Error('Status API failed');
+                
+                const data = await response.json();
+                
+                // Update mode
+                const modeBadge = document.getElementById('mode-badge');
+                if (data.mode === 'paper') {
+                    modeBadge.textContent = 'PAPER';
+                    modeBadge.className = 'mode-badge paper';
+                } else {
+                    modeBadge.textContent = 'LIVE';
+                    modeBadge.className = 'mode-badge live';
+                }
+                
+                // Update connection status
+                const wsStatus = document.getElementById('ws-status');
+                const connText = document.getElementById('connection-text');
+                if (data.bot_running) {
+                    wsStatus.classList.add('connected');
+                    connText.textContent = 'Running';
+                } else {
+                    wsStatus.classList.remove('connected');
+                    connText.textContent = 'Stopped';
+                }
+                
+                return true;
+            } catch (error) {
+                console.error('Status update failed:', error);
+                return false;
+            }
+        }
+
+        // Update Trade
+        async function updateTrade() {
+            try {
+                const response = await fetch('/api/trade', {
+                    signal: AbortSignal.timeout(5000)
+                });
+                
+                if (!response.ok) throw new Error('Trade API failed');
+                
+                const data = await response.json();
+                const container = document.getElementById('active-trade');
+                
+                if (!data.active || !data.trade) {
+                    container.innerHTML = '<div class="no-trade">No open trade</div>';
+                    return;
+                }
+                
+                const t = data.trade;
+                const sideClass = t.side === 'BUY' ? 'buy' : 'sell';
+                
+                container.innerHTML = `
+                    <div class="trade-info">
+                        <div class="trade-row">
+                            <span class="trade-label">Symbol</span>
+                            <span class="trade-value">${t.symbol}</span>
+                        </div>
+                        <div class="trade-row">
+                            <span class="trade-label">Side</span>
+                            <span class="trade-value ${sideClass}">${t.side}</span>
+                        </div>
+                        <div class="trade-row">
+                            <span class="trade-label">Qty</span>
+                            <span class="trade-value">${t.qty}</span>
+                        </div>
+                        <div class="trade-row">
+                            <span class="trade-label">Entry</span>
+                            <span class="trade-value">₹${t.entry_price?.toFixed(2)}</span>
+                        </div>
+                        <div class="trade-row">
+                            <span class="trade-label">SL</span>
+                            <span class="trade-value" style="color: var(--accent-red);">₹${t.stop_loss?.toFixed(2)}</span>
+                        </div>
+                        <div class="trade-row">
+                            <span class="trade-label">TP</span>
+                            <span class="trade-value" style="color: var(--accent);">₹${t.target?.toFixed(2)}</span>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Trade update failed:', error);
+            }
+        }
+
+        // Update Current Stock
+        async function updateCurrentStock() {
+            try {
+                const response = await fetch('/api/current-stock', {
+                    signal: AbortSignal.timeout(5000)
+                });
+                
+                if (!response.ok) throw new Error('Current stock API failed');
+                
+                const stock = await response.json();
+                const container = document.getElementById('current-stock');
+                
+                if (!stock) {
+                    container.innerHTML = '<div class="no-trade">No stock selected</div>';
+                    return;
+                }
+                
+                container.innerHTML = `
+                    <div class="trade-info">
+                        <div class="trade-row">
+                            <span class="trade-label">Symbol</span>
+                            <span class="trade-value">${stock.symbol}</span>
+                        </div>
+                        <div class="trade-row">
+                            <span class="trade-label">Score</span>
+                            <span class="trade-value" style="color: var(--accent);">${stock.score}</span>
+                        </div>
+                        <div class="trade-row">
+                            <span class="trade-label">Change</span>
+                            <span class="trade-value" style="color: ${stock.change_pct >= 0 ? 'var(--accent)' : 'var(--accent-red)'}">${stock.change_pct}%</span>
+                        </div>
+                        <div class="trade-row">
+                            <span class="trade-label">RSI</span>
+                            <span class="trade-value">${stock.rsi}</span>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Current stock update failed:', error);
+            }
+        }
+
+        // Update PnL
+        async function updatePnL() {
+            try {
+                const response = await fetch('/api/pnl', {
+                    signal: AbortSignal.timeout(5000)
+                });
+                
+                if (!response.ok) throw new Error('PnL API failed');
+                
+                const data = await response.json();
+                const pnlEl = document.getElementById('live-pnl');
+                const tradesEl = document.getElementById('trades-today');
+                const riskEl = document.getElementById('risk-limit');
+                
+                const pnl = data.realized_pnl || 0;
+                pnlEl.textContent = formatINR(pnl);
+                pnlEl.className = 'card-value ' + (pnl >= 0 ? 'positive' : 'negative');
+                
+                tradesEl.textContent = `${data.trades_today} trade${data.trades_today !== 1 ? 's' : ''} today`;
+                
+                riskEl.textContent = formatINR(data.max_loss);
+            } catch (error) {
+                console.error('PnL update failed:', error);
+            }
+        }
+
+        // Update Metrics
+        async function updateMetrics() {
+            try {
+                const response = await fetch('/api/metrics', {
+                    signal: AbortSignal.timeout(5000)
+                });
+                
+                if (!response.ok) throw new Error('Metrics API failed');
+                
+                const data = await response.json();
+                
+                document.getElementById('metric-trades').textContent = data.total_trades || 0;
+                document.getElementById('metric-winrate').textContent = (data.win_rate || 0) + '%';
+                
+                const pnlEl = document.getElementById('metric-pnl');
+                pnlEl.textContent = formatINR(data.total_pnl || 0);
+                pnlEl.className = 'metric-value ' + ((data.total_pnl || 0) >= 0 ? 'positive' : 'negative');
+                
+                document.getElementById('metric-pf').textContent = data.profit_factor || '0.0';
+            } catch (error) {
+                console.error('Metrics update failed:', error);
+            }
+        }
+
+        // Update Recent Trades
+        async function updateTrades() {
+            try {
+                const response = await fetch('/api/latest-trades?limit=5', {
+                    signal: AbortSignal.timeout(5000)
+                });
+                
+                if (!response.ok) throw new Error('Trades API failed');
+                
+                const trades = await response.json();
+                const tbody = document.getElementById('trades-body');
+                
+                if (!trades || trades.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="8" style="text-align: center; color: var(--muted);">
+                                No trades yet
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+                
+                tbody.innerHTML = trades.map(t => {
+                    const pnl = parseFloat(t.pnl) || 0;
+                    const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                    const sideClass = t.side === 'BUY' ? 'buy' : 'sell';
+                    
+                    const entryPrice = parseFloat(t.entry_price);
+                    const exitPrice = parseFloat(t.exit_price);
+                    
+                    // Symbol: live trades have it, backtest historical doesn't
+                    const symbol = t.symbol || '-';
+                    
+                    return `
+                        <tr>
+                            <td>${formatTime(t.exit_time)}</td>
+                            <td>${symbol}</td>
+                            <td class="trade-value ${sideClass}">${t.side || '-'}</td>
+                            <td>${t.qty || '-'}</td>
+                            <td>${isNaN(entryPrice) ? '-' : '₹' + entryPrice.toFixed(2)}</td>
+                            <td>${isNaN(exitPrice) ? '-' : '₹' + exitPrice.toFixed(2)}</td>
+                            <td class="${pnlClass}">${formatINR(pnl)}</td>
+                            <td>${t.exit_reason || '-'}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Trades update failed:', error);
+            }
+        }
+
+        // Load equity chart
+        async function loadEquityChart() {
+            try {
+                const response = await fetch('/api/equity-data', {
+                    signal: AbortSignal.timeout(5000)
+                });
+                
+                if (!response.ok) return;
+                
+                const data = await response.json();
+                
+                if (!data.data || data.data.length === 0) return;
+                
+                const canvas = document.getElementById('equity-chart');
+                const ctx = canvas.getContext('2d');
+                
+                // Set canvas size
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+                
+                const values = data.data.map(d => d.capital);
+                const min = Math.min(...values);
+                const max = Math.max(...values);
+                const range = max - min || 1;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.beginPath();
+                ctx.strokeStyle = '#34d399';
+                ctx.lineWidth = 1.5;
+                
+                values.forEach((val, i) => {
+                    const x = (i / (values.length - 1)) * canvas.width;
+                    const y = canvas.height - ((val - min) / range) * (canvas.height - 10) - 5;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                
+                ctx.stroke();
+            } catch (error) {
+                console.error('Equity chart failed:', error);
+            }
+        }
+
+        // Load scanner results
+        async function loadScanner() {
+            try {
+                const response = await fetch('/api/scanner', {
+                    signal: AbortSignal.timeout(5000)
+                });
+                
+                const container = document.getElementById('scanner-results');
+                
+                if (!response.ok) {
+                    container.innerHTML = '<p style="color: var(--muted); text-align: center; padding: 1rem;">Scanner results not available</p>';
+                    return;
+                }
+                
+                const data = await response.json();
+                
+                if (!data.results || data.results.length === 0) {
+                    container.innerHTML = '<p style="color: var(--muted); text-align: center; padding: 1rem;">No strong momentum stocks found</p>';
+                    return;
+                }
+                
+                container.innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Score</th>
+                                <th>Change %</th>
+                                <th>Sentiment</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.results.map(r => `
+                                <tr>
+                                    <td>${r.symbol}</td>
+                                    <td>${r.score}</td>
+                                    <td style="color: ${r.change_pct >= 0 ? 'var(--accent)' : 'var(--accent-red)'}">${r.change_pct}%</td>
+                                    <td>${r.sentiment}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    <p style="color: var(--muted); margin-top: 0.5rem;">Last scan: ${data.last_scan || 'Unknown'}</p>
+                `;
+            } catch (error) {
+                console.error('Scanner load failed:', error);
+            }
+        }
+
+        // Main update function
+        async function updateAll() {
+            const now = new Date().toLocaleTimeString('en-IN');
+            document.getElementById('last-update').textContent = now;
+            
+            await Promise.all([
+                updateStatus(),
+                updateCurrentStock(),
+                updateTrade(),
+                updatePnL(),
+                updateMetrics(),
+                updateTrades()
+            ]);
+            
+            loadEquityChart();
+        }
+
+        // Fetch Data button
+        document.getElementById('fetch-btn').addEventListener('click', async () => {
+            const stock = document.getElementById('stock-select').value;
+            const output = document.getElementById('fetch-output');
+            const btn = document.getElementById('fetch-btn');
+            
+            btn.disabled = true;
+            btn.textContent = 'Fetching...';
+            output.textContent = `Fetching ${stock} data...`;
+            
+            try {
+                const response = await fetch('/api/fetch-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stock })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    output.textContent = `Saved ${data.candles} candles to data/candles_${stock}_EQ.csv`;
+                } else {
+                    output.textContent = `Error: ${data.error}`;
+                }
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+            }
+            
+            btn.disabled = false;
+            btn.textContent = 'Fetch Data';
+        });
+
+        // Backtest button
+        document.getElementById('backtest-btn').addEventListener('click', async () => {
+            const stock = document.getElementById('backtest-stock').value;
+            const output = document.getElementById('backtest-output');
+            const btn = document.getElementById('backtest-btn');
+            
+            btn.disabled = true;
+            btn.textContent = 'Running...';
+            output.textContent = `Running backtest for ${stock}...`;
+            
+            try {
+                const response = await fetch('/api/backtest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stock })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    output.textContent = data.output || 'Backtest completed';
+                } else {
+                    output.textContent = `Error: ${data.error}`;
+                }
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+            }
+            
+            btn.disabled = false;
+            btn.textContent = 'Run Backtest';
+        });
+
+        // Mode toggle
+        document.getElementById('mode-toggle').addEventListener('click', async () => {
+            const toggle = document.getElementById('mode-toggle');
+            const currentMode = document.getElementById('mode-badge').textContent.toLowerCase();
+            const newMode = currentMode === 'paper' ? 'live' : 'paper';
+            
+            try {
+                const response = await fetch('/api/mode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: newMode })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    toggle.classList.toggle('active');
+                    updateStatus();
+                }
+            } catch (error) {
+                console.error('Mode switch failed:', error);
+            }
+        });
+
+        // Initialize
+        updateAll();
+        loadScanner();
+
+        // Auto-refresh every 3 seconds
+        setInterval(updateAll, 3000);
+    </script>
+</body>
+</html>
