@@ -268,6 +268,51 @@ async def get_status():
     }
 
 
+@app.get("/api/profile")
+async def get_profile():
+    """
+    Get FYERS user profile:
+    - name, email, mobile, DPid, broker name
+    Uses cached session from bot.
+    """
+    try:
+        from fyers_apiv3 import fyersModel
+        from config import settings
+        
+        if not settings.FYERS_ACCESS_TOKEN:
+            return {"success": False, "error": "No access token"}
+        
+        # Create fyers session (use 'token' not 'access_token')
+        fyers = fyersModel.FyersModel(
+            client_id=settings.FYERS_APP_ID,
+            is_async=False,
+            token=settings.FYERS_ACCESS_TOKEN,
+            log_path=''
+        )
+        
+        response = fyers.get_profile()
+        
+        if response.get('s') != 'ok':
+            return {"success": False, "error": response.get('message', 'Failed')}
+        
+        data = response.get('data', {})
+        
+        # Return only safe/public info
+        return {
+            "success": True,
+            "name": data.get('name', ''),
+            "email": data.get('email_id', ''),
+            "mobile": data.get('mobile_number', ''),
+            "fy_id": data.get('fy_id', ''),
+            "broker": "FYERS",
+            "pan": data.get('PAN', ''),
+            "pin_change_date": data.get('pin_change_date', ''),
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @app.get("/api/trade")
 async def get_trade():
     """

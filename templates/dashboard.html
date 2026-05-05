@@ -444,6 +444,7 @@
         <!-- Tabs -->
         <div class="tabs">
             <button class="tab active" data-tab="overview">Overview</button>
+            <button class="tab" data-tab="profile">My Profile</button>
             <button class="tab" data-tab="scanner">Momentum Scanner</button>
             <button class="tab" data-tab="data">Fetch Data</button>
             <button class="tab" data-tab="backtest">Run Backtest</button>
@@ -560,6 +561,18 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+
+        <!-- Profile Tab -->
+        <div class="tab-content" id="tab-profile">
+            <div class="card">
+                <div class="card-title">My FYERS Profile</div>
+                <div id="profile-data">
+                    <p style="color: var(--muted); text-align: center; padding: 1rem;">
+                        Loading profile...
+                    </p>
+                </div>
             </div>
         </div>
 
@@ -987,6 +1000,37 @@
                 `;
             } catch (error) {
                 console.error('Scanner load failed:', error);
+            }
+        }
+
+        // Profile Tab click handler
+        document.querySelector('[data-tab="profile"]').addEventListener('click', function() {
+            loadProfile();
+        });
+
+        async function loadProfile() {
+            try {
+                const res = await fetch('/api/profile');
+                const data = await res.json();
+                const container = document.getElementById('profile-data');
+                
+                if (!data.success) {
+                    container.innerHTML = '<p style="color: var(--accent-red); text-align: center; padding: 1rem;">' + data.error + '</p>';
+                    return;
+                }
+                
+                container.innerHTML = `
+                    <table class="trades-table">
+                        <tr><td>Name</td><td>${data.name || '-'}</td></tr>
+                        <tr><td>Email</td><td>${data.email || '-'}</td></tr>
+                        <tr><td>Mobile</td><td>${data.mobile || '-'}</td></tr>
+                        <tr><td>FY ID</td><td>${data.fy_id || '-'}</td></tr>
+                        <tr><td>PAN</td><td>${data.pan || '-'}</td></tr>
+                        <tr><td>PIN Changed</td><td>${data.pin_change_date || '-'}</td></tr>
+                    </table>
+                `;
+            } catch (error) {
+                console.error('Profile load failed:', error);
             }
         }
 
