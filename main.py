@@ -41,9 +41,40 @@ def check_mode():
     log.info("Running connection check...")
     from core.broker import FyersBroker
     broker = FyersBroker()
+    
+    if not broker.access_token:
+        log.info("No access token. Generating auth URL...")
+        broker.generate_auth_url()
+        log.info("Steps:")
+        log.info("  1. Open the URL above in your browser")
+        log.info("  2. Login and authorize")
+        log.info("  3. Copy the 'code' from redirect URL")
+        log.info("  4. Run: python main.py --login <code>")
+        return
+    
     if not broker.login():
-        log.error("❌ Login failed. Check .env credentials.")
+        log.error("❌ Login failed. Check FYERS credentials.")
         sys.exit(1)
+    
+    # Save access token to .env
+    env_file = os.path.join(os.path.dirname(__file__), ".env")
+    try:
+        lines = []
+        if os.path.exists(env_file):
+            with open(env_file, "r") as f:
+                for line in f:
+                    if line.startswith("FYERS_ACCESS_TOKEN="):
+                        lines.append(f"FYERS_ACCESS_TOKEN={broker.access_token}\n")
+                    else:
+                        lines.append(line)
+        if not any(l.startswith("FYERS_ACCESS_TOKEN=") for l in lines):
+            lines.append(f"FYERS_ACCESS_TOKEN={broker.access_token}\n")
+        with open(env_file, "w") as f:
+            f.writelines(lines)
+        log.info("✅ Access token saved to .env")
+    except Exception as e:
+        log.warning(f"Could not save token: {e}")
+    
     ltp = broker.get_ltp()
     if ltp:
         log.info(f"✅ Market data OK | {settings.SYMBOL} LTP = ₹{ltp:.2f}")
@@ -130,6 +161,34 @@ def main():
 
     if "--check" in args:
         check_mode()
+    elif "--login" in args:
+        idx = args.index("--login")
+        if idx + 1 < len(args):
+            auth_code = args[idx + 1]
+            from core.broker import FyersBroker
+            broker = FyersBroker()
+            if broker.login(auth_code):
+                # Save token to .env
+                env_file = os.path.join(os.path.dirname(__file__), ".env")
+                try:
+                    lines = []
+                    if os.path.exists(env_file):
+                        with open(env_file, "r") as f:
+                            for line in f:
+                                if line.startswith("FYERS_ACCESS_TOKEN="):
+                                    lines.append(f"FYERS_ACCESS_TOKEN={broker.access_token}\n")
+                                else:
+                                    lines.append(line)
+                    if not any(l.startswith("FYERS_ACCESS_TOKEN=") for l in lines):
+                        lines.append(f"FYERS_ACCESS_TOKEN={broker.access_token}\n")
+                    with open(env_file, "w") as f:
+                        f.writelines(lines)
+                    log.info("✅ Token saved to .env")
+                except Exception as e:
+                    log.warning(f"Could not save token: {e}")
+                log.info("✅ Login successful!")
+            else:
+                log.error("❌ Login failed")
     elif "--backtest" in args:
         log.info("Backtest mode coming soon. Run the strategy on historical CSV data.")
     elif "--api" in args:

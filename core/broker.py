@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """
 core/broker.py
-FYERS API v3 wrapper for trading.
+FYERS API v3 wrapper using official fyers_apiv3 SDK.
 Handles login, websocket, order placement,
 position management, and market data.
 """
 
 import time
-import hashlib
 import json
 import pandas as pd
-import requests
 from datetime import datetime, timedelta
 import pytz
 from typing import Optional
@@ -45,6 +43,7 @@ class FyersBroker:
         self.secret_id = settings.FYERS_SECRET_ID
         self.redirect_uri = settings.FYERS_REDIRECT_URI
         self.access_token = settings.FYERS_ACCESS_TOKEN
+        self.refresh_token = None
 
         self.logged_in = False
 
@@ -62,57 +61,86 @@ class FyersBroker:
         self.ws = None
         self.ws_thread = None
 
-    def _get_app_id_hash(self) -> str:
-        combined = f"{self.app_id}:{self.secret_id}"
-        return hashlib.sha256(combined.encode()).hexdigest()
+        self.fyers = None
+        self.session = None
 
-    def generate_auth_code(self) -> str:
+    def generate_auth_url(self) -> str:
+        """Generate the OAuth URL for user to login."""
+        state = "state123"
         auth_url = (
             f"{FYERS_BASE_URL}/api/v3/generate-authcode"
             f"?client_id={self.app_id}"
             f"&redirect_uri={self.redirect_uri}"
             f"&response_type=code"
-            f"&state=sample_state"
+            f"&state={state}"
         )
-        log.info(f"Open this URL to login: {auth_url}")
+        log.info(f"Open this URL in browser to login:")
+        log.info(f"{auth_url}")
+        log.info("After login, copy the 'code' from redirect URL and use:")
+        log.info("  python main.py --login <code>")
         return auth_url
 
-    def login(self) -> bool:
+    def login(self, auth_code: str = None) -> bool:
 
-        if not self.access_token:
-            log.error("No access token. Generate it from FYERS web dashboard.")
-            log.info("1. Go to https://myapi.fyers.in/")
-            log.info("2. Create an app to get app_id and secret_id")
-            log.info("3. Generate access token from web dashboard")
+        if not self.access_token and not auth_code:
+            log.error("No access token or auth code provided.")
+            self.generate_auth_url()
             return False
 
         try:
-            headers = {
-                "Authorization": f"{self.app_id}:{self.access_token}"
-            }
+            from fyers_apiv3 import fyersModel
 
-            response = requests.get(
-                f"{FYERS_BASE_URL}/api/v3/profile",
-                headers=headers,
-                timeout=10
+            self.session = fyersModel.SessionModel(
+                client_id=self.app_id,
+                secret_key=self.secret_id,
+                redirect_uri=self.redirect_uri,
+                response_type="code",
+                grant_type="authorization_code"
             )
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("s") == 1:
-                    self.logged_in = True
-                    log.info("✅ Login successful")
-                    self._start_websocket()
-                    return True
+            if auth_code:
+                self.session.set_token(auth_code)
+                response = self.session.generate_token()
+                
+                log.info(f"Token response: {response}")
+                
+                if response.get("s") == "ok" or response.get("code") == 200:
+                    self.access_token = response.get("access_token", "")
+                    self.refresh_token = response.get("refresh_token", "")
+                    self.session.set_token(self.access_token)
+                    
+                    log.info(f"Access token saved")
                 else:
-                    log.error(f"❌ Login failed: {data}")
+                    log.error(f"❌ Token generation failed: {response}")
                     return False
             else:
-                log.error(f"❌ Login HTTP {response.status_code}: {response.text}")
+                self.session.set_token(self.access_token)
+
+            self.fyers = fyersModel.FyersModel(
+                client_id=self.app_id,
+                is_async=False, 
+                token=self.access_token,
+                log_path=""
+            )
+
+            profile = self.fyers.get_profile()
+            
+            if profile.get("s") == "ok":
+                self.logged_in = True
+                log.info("✅ Login successful")
+                log.info(f"Profile: {profile.get('d', {}).get('name', 'User')}")
+                return True
+            else:
+                log.error(f"❌ Profile fetch failed: {profile}")
                 return False
 
+        except ImportError:
+            log.error("fyers_apiv3 not installed. Run: pip install fyers_apiv3")
+            return False
         except Exception as e:
             log.error(f"Login error: {e}")
+            import traceback
+            log.error(traceback.format_exc())
             return False
 
     def _start_websocket(self):
@@ -145,9 +173,7 @@ class FyersBroker:
                 on_open=on_open,
                 on_close=on_close,
                 on_error=on_error,
-                header={
-                    "Authorization": f"{self.app_id}:{self.access_token}"
-                }
+                header={"Authorization": f"{self.app_id}:{self.access_token}"}
             )
 
             def run_ws():
@@ -209,31 +235,29 @@ class FyersBroker:
 
     def get_quote(self, symbol: str = None, exchange: str = None) -> Optional[dict]:
 
+        if not self.fyers:
+            log.error("Not logged in")
+            return None
+
         sym = symbol or settings.SYMBOL
-        headers = {
-            "Authorization": f"{self.app_id}:{self.access_token}"
-        }
 
         try:
-            response = requests.get(
-                f"{FYERS_BASE_URL}/data/quotes/",
-                params={"symbols": f"NSE:{sym}"},
-                headers=headers,
-                timeout=10
-            )
+            response = self.fyers.quotes({
+                "symbol": f"NSE:{sym}"
+            })
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("s") == 1:
-                    d = data.get("d", [])[0]
-                    return {
-                        "ltp": float(d.get("lp", 0)),
-                        "open": float(d.get("o", 0)),
-                        "high": float(d.get("h", 0)),
-                        "low": float(d.get("l", 0)),
-                        "close": float(d.get("c", 0)),
-                        "volume": int(d.get("v", 0)),
-                    }
+            if response.get("s") == "ok":
+                d = response.get("d", [])[0]
+                return {
+                    "ltp": float(d.get("lp", 0)),
+                    "open": float(d.get("o", 0)),
+                    "high": float(d.get("h", 0)),
+                    "low": float(d.get("l", 0)),
+                    "close": float(d.get("c", 0)),
+                    "volume": int(d.get("v", 0)),
+                }
+            else:
+                log.error(f"Quote error: {response}")
 
         except Exception as e:
             log.error(f"get_quote error: {e}")
@@ -261,50 +285,40 @@ class FyersBroker:
 
         sym = symbol or settings.SYMBOL
         ivl = interval or settings.CANDLE_INTERVAL
-        headers = {
-            "Authorization": f"{self.app_id}:{self.access_token}"
-        }
 
         end_dt = datetime.now(IST)
         start_dt = end_dt - timedelta(days=lookback_days)
 
-        params = {
-            "symbol": f"NSE:{sym}",
-            "resolution": ivl,
-            "date_format": "1",
-            "range_from": start_dt.strftime("%Y-%m-%d"),
-            "range_to": end_dt.strftime("%Y-%m-%d"),
-            "cont_flag": "1"
-        }
-
         try:
-            response = requests.get(
-                f"{FYERS_BASE_URL}/data/history",
-                params=params,
-                headers=headers,
-                timeout=15
-            )
+            response = self.fyers.history({
+                "symbol": f"NSE:{sym}",
+                "resolution": str(ivl),
+                "date_format": "1",
+                "range_from": start_dt.strftime("%Y-%m-%d"),
+                "range_to": end_dt.strftime("%Y-%m-%d"),
+                "cont_flag": "1"
+            })
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("s") == 1:
-                    candles = data.get("candles", [])
-                    rows = []
-                    for c in candles:
-                        rows.append({
-                            "datetime": datetime.fromtimestamp(c[0]),
-                            "open": float(c[1]),
-                            "high": float(c[2]),
-                            "low": float(c[3]),
-                            "close": float(c[4]),
-                            "volume": int(c[5]) if len(c) > 5 else 0,
-                        })
+            if response.get("s") == "ok":
+                candles = response.get("candles", [])
+                rows = []
+                for c in candles:
+                    rows.append({
+                        "datetime": datetime.fromtimestamp(c[0]),
+                        "open": float(c[1]),
+                        "high": float(c[2]),
+                        "low": float(c[3]),
+                        "close": float(c[4]),
+                        "volume": int(c[5]) if len(c) > 5 else 0,
+                    })
 
-                    df = pd.DataFrame(rows)
-                    df = df.sort_values("datetime")
-                    df = df.reset_index(drop=True)
-                    log.debug(f"Fetched {len(df)} candles for {sym}")
-                    return df
+                df = pd.DataFrame(rows)
+                df = df.sort_values("datetime")
+                df = df.reset_index(drop=True)
+                log.debug(f"Fetched {len(df)} candles for {sym}")
+                return df
+            else:
+                log.error(f"History error: {response}")
 
         except Exception as e:
             log.error(f"get_candles error: {e}")
@@ -344,20 +358,19 @@ class FyersBroker:
                 "fill_price": fill_price
             }
 
-        headers = {
-            "Authorization": f"{self.app_id}:{self.access_token}",
-            "Content-Type": "application/json"
-        }
+        if not self.fyers:
+            return {"success": False, "message": "Not logged in"}
 
         side_map = {"BUY": 1, "SELL": 2}
+        order_type_map = {"MKT": 2, "LIMIT": 1}
 
         order_payload = {
             "symbol": f"NSE:{symbol}",
             "qty": qty,
-            "type": 2 if order_type == "MKT" else 1,
+            "type": order_type_map.get(order_type, 2),
             "side": side_map.get(side, 1),
             "productType": "INTRADAY",
-            "limitPrice": 0 if order_type == "MKT" else 0,
+            "limitPrice": 0,
             "stopPrice": 0,
             "disclosedQty": 0,
             "validity": "DAY",
@@ -367,27 +380,20 @@ class FyersBroker:
         }
 
         try:
-            response = requests.post(
-                f"{FYERS_BASE_URL}/api/v3/orders/sync",
-                json=order_payload,
-                headers=headers,
-                timeout=10
-            )
+            response = self.fyers.place_order(order_payload)
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("s") == 1:
-                    log.info(f"✅ LIVE ORDER: {side} {qty} {symbol}")
-                    return {
-                        "success": True,
-                        "order_id": data.get("id", ""),
-                        "message": "Live order placed"
-                    }
+            if response.get("s") == "ok":
+                log.info(f"✅ LIVE ORDER: {side} {qty} {symbol}")
+                return {
+                    "success": True,
+                    "order_id": response.get("id", ""),
+                    "message": "Live order placed"
+                }
 
-            log.error(f"place_order failed: {response.text}")
+            log.error(f"place_order failed: {response}")
             return {
                 "success": False,
-                "message": str(response.text)
+                "message": str(response)
             }
 
         except Exception as e:
@@ -412,10 +418,8 @@ class FyersBroker:
                 "message": "Paper SL order"
             }
 
-        headers = {
-            "Authorization": f"{self.app_id}:{self.access_token}",
-            "Content-Type": "application/json"
-        }
+        if not self.fyers:
+            return {"success": False, "message": "Not logged in"}
 
         side_map = {"BUY": 1, "SELL": 2}
 
@@ -435,26 +439,19 @@ class FyersBroker:
         }
 
         try:
-            response = requests.post(
-                f"{FYERS_BASE_URL}/api/v3/orders/sync",
-                json=order_payload,
-                headers=headers,
-                timeout=10
-            )
+            response = self.fyers.place_order(order_payload)
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("s") == 1:
-                    log.info(f"✅ SL ORDER: {symbol} @ {trigger_price}")
-                    return {
-                        "success": True,
-                        "order_id": data.get("id", ""),
-                        "message": "SL order placed"
-                    }
+            if response.get("s") == "ok":
+                log.info(f"✅ SL ORDER: {symbol} @ {trigger_price}")
+                return {
+                    "success": True,
+                    "order_id": response.get("id", ""),
+                    "message": "SL order placed"
+                }
 
             return {
                 "success": False,
-                "message": str(response.text)
+                "message": str(response)
             }
 
         except Exception as e:
@@ -469,20 +466,12 @@ class FyersBroker:
             log.info(f"[PAPER] Cancel order {order_id}")
             return True
 
-        headers = {
-            "Authorization": f"{self.app_id}:{self.access_token}",
-            "Content-Type": "application/json"
-        }
+        if not self.fyers:
+            return False
 
         try:
-            response = requests.delete(
-                f"{FYERS_BASE_URL}/api/v3/orders/sync",
-                json={"id": order_id},
-                headers=headers,
-                timeout=10
-            )
-
-            return response.status_code == 200
+            response = self.fyers.cancel_order({"id": order_id})
+            return response.get("s") == "ok"
 
         except Exception:
             return False
@@ -492,24 +481,17 @@ class FyersBroker:
         if settings.PAPER_TRADE:
             return "COMPLETE"
 
-        headers = {
-            "Authorization": f"{self.app_id}:{self.access_token}"
-        }
+        if not self.fyers:
+            return None
 
         try:
-            response = requests.get(
-                f"{FYERS_BASE_URL}/api/v3/orders",
-                params={"id": order_id},
-                headers=headers,
-                timeout=10
-            )
+            response = self.fyers.orderbook()
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("s") == 1:
-                    orders = data.get("d", [])
-                    if orders:
-                        return orders[0].get("status", "")
+            if response.get("s") == "ok":
+                orders = response.get("d", [])
+                for o in orders:
+                    if o.get("id") == order_id:
+                        return o.get("status", "")
 
         except Exception as e:
             log.error(f"Order status error: {e}")
@@ -524,24 +506,17 @@ class FyersBroker:
                     return o["fill_price"]
             return None
 
-        headers = {
-            "Authorization": f"{self.app_id}:{self.access_token}"
-        }
+        if not self.fyers:
+            return None
 
         try:
-            response = requests.get(
-                f"{FYERS_BASE_URL}/api/v3/orders",
-                params={"id": order_id},
-                headers=headers,
-                timeout=10
-            )
+            response = self.fyers.orderbook()
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("s") == 1:
-                    orders = data.get("d", [])
-                    if orders:
-                        return float(orders[0].get("avgPrc", 0))
+            if response.get("s") == "ok":
+                orders = response.get("d", [])
+                for o in orders:
+                    if o.get("id") == order_id:
+                        return float(o.get("avgPrc", 0))
 
         except Exception as e:
             log.error(f"Fill price error: {e}")
@@ -553,35 +528,28 @@ class FyersBroker:
         if settings.PAPER_TRADE:
             return self._paper_positions()
 
-        headers = {
-            "Authorization": f"{self.app_id}:{self.access_token}"
-        }
+        if not self.fyers:
+            return []
 
         try:
-            response = requests.get(
-                f"{FYERS_BASE_URL}/api/v3/positions",
-                headers=headers,
-                timeout=10
-            )
+            response = self.fyers.positions()
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("s") == 1:
-                    positions = []
-                    for p in data.get("d", []):
-                        qty = int(p.get("netQty", 0))
-                        if qty == 0:
-                            continue
+            if response.get("s") == "ok":
+                positions = []
+                for p in response.get("d", []):
+                    qty = int(p.get("netQty", 0))
+                    if qty == 0:
+                        continue
 
-                        positions.append({
-                            "symbol": p.get("sym", ""),
-                            "qty": qty,
-                            "avg_price": float(p.get("avgCost", 0)),
-                            "side": "BUY" if qty > 0 else "SELL",
-                            "pnl": float(p.get("urPnl", 0)),
-                        })
+                    positions.append({
+                        "symbol": p.get("sym", ""),
+                        "qty": qty,
+                        "avg_price": float(p.get("avgCost", 0)),
+                        "side": "BUY" if qty > 0 else "SELL",
+                        "pnl": float(p.get("urPnl", 0)),
+                    })
 
-                    return positions
+                return positions
 
         except Exception as e:
             log.error(f"get_positions error: {e}")
@@ -593,26 +561,35 @@ class FyersBroker:
         if settings.PAPER_TRADE:
             return self._paper_orders.copy()
 
-        headers = {
-            "Authorization": f"{self.app_id}:{self.access_token}"
-        }
+        if not self.fyers:
+            return []
 
         try:
-            response = requests.get(
-                f"{FYERS_BASE_URL}/api/v3/orders",
-                headers=headers,
-                timeout=10
-            )
+            response = self.fyers.orderbook()
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("s") == 1:
-                    return data.get("d", [])
+            if response.get("s") == "ok":
+                return response.get("d", [])
 
         except Exception as e:
             log.error(f"get_order_book error: {e}")
 
         return []
+
+    def get_funds(self) -> dict:
+
+        if not self.fyers:
+            return {}
+
+        try:
+            response = self.fyers.funds()
+
+            if response.get("s") == "ok":
+                return response.get("d", {})
+
+        except Exception as e:
+            log.error(f"get_funds error: {e}")
+
+        return {}
 
     def square_off_all(self):
 
