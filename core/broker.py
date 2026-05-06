@@ -323,6 +323,21 @@ class FyersBroker:
         except Exception as e:
             log.error(f"get_candles error: {e}")
 
+        # Fallback to cached data if API fails
+        try:
+            csv_filename = f"candles_{sym.replace('-','_')}.csv"
+            csv_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)), 
+                "data", 
+                csv_filename
+            )
+            if os.path.exists(csv_path):
+                df = pd.read_csv(csv_path, parse_dates=["datetime"])
+                log.info(f"Using cached data for {sym}: {len(df)} candles")
+                return df
+        except Exception as e:
+            log.debug(f"Could not load cached data: {e}")
+
         return pd.DataFrame()
 
     def place_order(

@@ -92,16 +92,12 @@ while True:
                     log.debug(f"{stock}: Skipping - {reason}")
                     continue
 
+            # Get scanner result (include low scores when market is closed)
             result = scan_stock(stock)
 
             if result:
-
-                # ---------------------------------
-                # STEP 2: MOMENTUM FILTER
-                # ---------------------------------
-
-                if passes_momentum_filter(result["change_pct"], result["score"]):
-                    scanner_results.append(result)
+                # Add directly - scan_stock already handles filtering
+                scanner_results.append(result)
 
         # -----------------------------------------
         # SORT

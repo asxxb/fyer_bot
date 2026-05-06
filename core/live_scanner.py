@@ -1,4 +1,5 @@
 import time
+import os
 
 import pandas as pd
 
@@ -25,6 +26,7 @@ class LiveScanner:
 
     def __init__(self):
         self.broker = FyersBroker()
+        self.broker.login()  # Login before scanning
         self.strategy = EmaRsiScalper()
         # Cache for performance data with refresh
         self._perf_data = None
@@ -45,6 +47,9 @@ class LiveScanner:
                 df = self.broker.get_candles(
                     symbol=symbol
                 )
+
+                # Rate limiting - wait between API calls
+                time.sleep(2)
 
                 if df.empty or len(df) < 60:
                     continue

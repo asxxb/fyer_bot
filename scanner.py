@@ -1,49 +1,131 @@
-import yfinance as yf
-import pandas as pd
+"""
+scanner.py
+Stock scanner using FYERS API (primary) or yfinance (fallback).
+"""
 
-from ta.trend import EMAIndicator
+import os
+import time
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+
+import yfinance as yf
+from ta.trend import EMAIndicator, MACD
 from ta.momentum import RSIIndicator
-from ta.volatility import AverageTrueRange
 
 from config import settings
+from utils.logger import get_logger
+
 from core.scanner import (
+    compute_score,
     get_performance_data,
     to_internal,
     should_include_stock,
-    passes_momentum_filter,
-    compute_score,
-    safe_divide
+    passes_momentum_filter
 )
-from utils.logger import get_logger
+
+from core.broker import FyersBroker
 
 log = get_logger()
 
-# ---------------------------------------------------
-# WATCHLIST (strip -EQ from settings.WATCHLIST)
-# ---------------------------------------------------
+# FYERS broker singleton
+_broker = None
 
-# Strip -EQ for yfinance symbol but keep -EQ for performance lookup
-WATCHLIST = [s.replace("-EQ", "") for s in settings.WATCHLIST]
 
-# Helper to get performance data with -EQ suffix (dynamic)
-def get_performance(stock):
-    """Get performance data using -EQ suffix. Returns None if missing."""
-    return get_performance_data().get(to_internal(stock))
+def _get_broker():
+    """Get or create FYERS broker."""
+    global _broker
+    if _broker is None:
+        _broker = FyersBroker()
+        _broker.login()
+    return _broker
 
-# ---------------------------------------------------
-# SCAN SINGLE STOCK
-# ---------------------------------------------------
 
-def scan_stock(symbol):
+def scan_stock_fyers(symbol):
+    """Scan a single stock using FYERS API."""
+    
+    try:
+        broker = _get_broker()
+        if not broker or not broker.logged_in:
+            log.debug(f"{symbol}: Not logged in")
+            return None
+
+        # Get 5-minute candles
+        full_symbol = f"{symbol}-EQ"
+        df = broker.get_candles(
+            symbol=full_symbol,
+            interval=5,
+            lookback_days=5
+        )
+
+        if df is None or df.empty:
+            log.debug(f"{symbol}: No data from FYERS")
+            return None
+
+        if len(df) < 60:
+            log.debug(f"{symbol}: Only {len(df)} candles, need 60")
+            return None
+
+        # Use lowercase column names from broker
+        close_col = df["close"]
+        ltp = close_col.iloc[-1]
+        prev = close_col.iloc[-2] if len(close_col) > 1 else ltp
+        change_pct = ((ltp - prev) / prev) * 100
+
+        # EMA
+        ema_9 = EMAIndicator(close_col, window=9).ema_indicator().iloc[-1]
+        ema_21 = EMAIndicator(close_col, window=21).ema_indicator().iloc[-1]
+        rsi_14 = RSIIndicator(close_col, window=14).rsi().iloc[-1]
+
+        # MACD
+        macd = MACD(close_col)
+        macd_hist = macd.macd_diff().iloc[-1]
+
+        vol = df["volume"]
+        avg_vol = vol.rolling(20).mean().iloc[-1]
+        rel_volume = float(vol.iloc[-1]) / float(avg_vol) if avg_vol > 0 else 1.0
+
+        trend = "SIDEWAYS"
+        trend_strength = 0
+        if pd.notna(ema_9) and pd.notna(ema_21):
+            if ema_9 > ema_21:
+                trend = "UP"
+                trend_strength = 2
+            elif ema_9 < ema_21:
+                trend = "DOWN"
+                trend_strength = 1
+
+        row_dict = df.iloc[-1].to_dict()
+        score = compute_score(row_dict, rel_volume, change_pct, trend_strength)
+
+        return {
+            "symbol": symbol,
+            "ltp": round(float(ltp), 2),
+            "change_pct": round(float(change_pct), 2),
+            "score": round(float(score), 1),
+            "volume": int(vol.iloc[-1]),
+            "trend": trend,
+            "ema_9": round(float(ema_9), 2) if pd.notna(ema_9) else None,
+            "ema_21": round(float(ema_21), 2) if pd.notna(ema_21) else None,
+            "rsi": round(float(rsi_14), 1) if pd.notna(rsi_14) else None,
+            "macd_hist": round(float(macd_hist), 2),
+            "source": "FYERS"
+        }
+
+    except Exception as e:
+        log.debug(f"{symbol}: FYERS Error - {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def scan_stock_yfinance(symbol):
+    """Scan a single stock using yfinance (fallback)."""
 
     try:
-
         yahoo_symbol = f"{symbol}.NS"
 
-        # -----------------------------------------
-        # FETCH DATA (with retry)
-        # -----------------------------------------
-
+        # Fetch data with retry
         df = None
         for _ in range(2):
             try:
@@ -57,373 +139,87 @@ def scan_stock(symbol):
                 if df is not None and not df.empty:
                     break
             except Exception as e:
-                log.debug(f"{symbol}: Retry after error - {e}")
+                log.debug(f"{symbol}: Retry - {e}")
         
         if df is None or df.empty:
-            log.debug(f"{symbol}: No data (after retries)")
-            return None
-
-        # -----------------------------------------
-        # EMPTY CHECK
-        # -----------------------------------------
-
-        if df.empty or len(df) < 60:
-
             log.debug(f"{symbol}: No data")
-
             return None
 
-        # -----------------------------------------
-        # FIX MULTIINDEX
-        # -----------------------------------------
-
+        # Fix multiindex
         if isinstance(df.columns, pd.MultiIndex):
-
-            df.columns = (
-                df.columns.get_level_values(0)
-            )
-
-        # -----------------------------------------
-        # RESET INDEX
-        # -----------------------------------------
-
-        df.reset_index(inplace=True)
-
-        # -----------------------------------------
-        # RENAME COLUMNS
-        # -----------------------------------------
-
-        df.rename(columns={
-
-            "Datetime": "datetime",
-            "Open": "open",
-            "High": "high",
-            "Low": "low",
-            "Close": "close",
-            "Volume": "volume"
-
-        }, inplace=True)
-
-        # -----------------------------------------
-        # KEEP REQUIRED COLUMNS
-        # -----------------------------------------
-
-        required_columns = [
-
-            "datetime",
-            "open",
-            "high",
-            "low",
-            "close",
-            "volume"
-
-        ]
-
-        if not set(required_columns).issubset(df.columns):
-
-            log.debug(f"{symbol}: Missing OHLCV")
-
-            return None
-
-        df = df[required_columns]
-
-        # -----------------------------------------
-        # NUMERIC CONVERSION
-        # -----------------------------------------
-
-        for col in [
-
-            "open",
-            "high",
-            "low",
-            "close",
-            "volume"
-
-        ]:
-
-            df[col] = pd.to_numeric(
-                df[col],
-                errors="coerce"
-            )
-
-        df.dropna(inplace=True)
-
-        # -----------------------------------------
-        # NEED ENOUGH DATA
-        # -----------------------------------------
+            df.columns = df.columns.get_level_values(0)
 
         if len(df) < 60:
-
+            log.debug(f"{symbol}: Insufficient data")
             return None
 
-        # -----------------------------------------
-        # EMA
-        # -----------------------------------------
+        # Get latest price
+        close = df["Close"]
+        ltp = close.iloc[-1]
+        prev_close = close.iloc[-2] if len(close) > 1 else ltp
+        change_pct = ((ltp - prev_close) / prev_close) * 100
 
-        df["ema20"] = EMAIndicator(
+        # Calculate indicators
+        ema_9 = EMAIndicator(close, window=9).ema_indicator()
+        ema_21 = EMAIndicator(close, window=21).ema_indicator()
+        rsi_14 = RSIIndicator(close, window=14).rsi()
+        
+        macd = MACD(close)
+        macd_hist = macd.macd_diff().iloc[-1] if len(macd.macd_diff()) > 0 else 0
 
-            close=df["close"],
-            window=20
+        vol = df["Volume"]
+        avg_vol = vol.rolling(20).mean().iloc[-1]
+        rel_volume = vol.iloc[-1] / avg_vol if avg_vol > 0 else 1
 
-        ).ema_indicator()
+        trend = "SIDEWAYS"
+        trend_strength = 0
 
-        df["ema50"] = EMAIndicator(
+        if pd.notna(ema_9) and pd.notna(ema_21):
+            if ema_9 > ema_21:
+                trend = "UP"
+                trend_strength = 2
+            elif ema_9 < ema_21:
+                trend = "DOWN"
+                trend_strength = 1
 
-            close=df["close"],
-            window=50
-
-        ).ema_indicator()
-
-        # -----------------------------------------
-        # RSI
-        # -----------------------------------------
-
-        df["rsi"] = RSIIndicator(
-
-            close=df["close"],
-            window=14
-
-        ).rsi()
-
-        # -----------------------------------------
-        # ATR
-        # -----------------------------------------
-
-        atr = AverageTrueRange(
-
-            high=df["high"],
-            low=df["low"],
-            close=df["close"],
-            window=14
-
-        )
-
-        df["atr"] = atr.average_true_range()
-
-        # -----------------------------------------
-        # VWAP
-        # -----------------------------------------
-
-        df["datetime"] = pd.to_datetime(
-            df["datetime"]
-        )
-
-        typical_price = (
-
-            df["high"] +
-            df["low"] +
-            df["close"]
-
-        ) / 3
-
-        df["date"] = (
-            df["datetime"].dt.date
-        )
-
-        df["tpv"] = (
-            typical_price *
-            df["volume"]
-        )
-
-        df["vwap"] = (
-
-            df.groupby("date")["tpv"].cumsum()
-
-            /
-
-            df.groupby("date")["volume"].cumsum()
-
-        )
-
-        # -----------------------------------------
-        # VOLUME MA
-        # -----------------------------------------
-
-        df["vol_ma"] = (
-
-            df["volume"]
-            .rolling(20)
-            .mean()
-
-        )
-
-        # -----------------------------------------
-        # USE PREVIOUS CLOSED CANDLE
-        # -----------------------------------------
-
-        row = df.iloc[-2]
-
-        # -----------------------------------------
-        # RELATIVE VOLUME (with division safety)
-        # -----------------------------------------
-
-        rel_volume = safe_divide(
-            row["volume"],
-            row["vol_ma"]
-        )
-
-        # -----------------------------------------
-        # PRICE CHANGE % (with division safety)
-        # -----------------------------------------
-
-        old_close = df.iloc[-10]["close"]
-
-        change_pct = safe_divide(
-            row["close"] - old_close,
-            old_close
-        ) * 100
-
-        # -----------------------------------------
-        # TREND STRENGTH (with division safety)
-        # -----------------------------------------
-
-        trend_strength = safe_divide(
-            abs(row["ema20"] - row["ema50"]),
-            row["close"]
-        )
-
-        # -----------------------------------------
-        # ATR % (with division safety)
-        # -----------------------------------------
-
-        atr_pct = safe_divide(
-            row["atr"],
-            row["close"]
-        )
-
-        # -----------------------------------------
-        # SCORE SYSTEM (using shared function)
-        # -----------------------------------------
-
-        score = compute_score(row, rel_volume, change_pct, trend_strength)
-
-        # -----------------------------------------
-        # RETURN RESULT
-        # -----------------------------------------
+        row_dict = df.iloc[-1].to_dict()
+        score = compute_score(row_dict, rel_volume, change_pct, trend_strength)
 
         return {
-
             "symbol": symbol,
-
-            "close": round(
-                row["close"],
-                2
-            ),
-
-            "rsi": round(
-                row["rsi"],
-                2
-            ),
-
-            "rel_volume": round(
-                rel_volume,
-                2
-            ),
-
-            "change_pct": round(
-                change_pct,
-                2
-            ),
-
-            "trend_strength": round(
-                trend_strength,
-                4
-            ),
-
-            "score": round(
-                score,
-                2
-            )
-
+            "ltp": round(ltp, 2),
+            "change_pct": round(change_pct, 2),
+            "score": round(score, 1),
+            "volume": int(vol.iloc[-1]),
+            "trend": trend,
+            "ema_9": round(ema_9, 2) if pd.notna(ema_9) else None,
+            "ema_21": round(ema_21, 2) if pd.notna(ema_21) else None,
+            "rsi": round(rsi_14, 1) if pd.notna(rsi_14) else None,
+            "macd_hist": round(macd_hist, 2),
+            "source": "yfinance"
         }
 
     except Exception as e:
+        log.debug(f"{symbol}: yfinance Error - {e}")
+        return None
 
-        log.debug(f"{symbol} error: {e}")
 
+# Default scanner - tries FYERS first, falls back to yfinance
+def scan_stock(symbol):
+    """Scan a single stock. Returns result regardless of score."""
+    
+    # Try FYERS first
+    result = scan_stock_fyers(symbol)
+    if result:
+        return result
+    
+    # Fallback to yfinance
+    result = scan_stock_yfinance(symbol)
+    if result:
+        return result
+    
     return None
 
 
-# ---------------------------------------------------
-# RUN SCANNER
-# ---------------------------------------------------
-
-if __name__ == "__main__":
-
-    results = []
-
-    for stock in WATCHLIST:
-
-        # -----------------------------------------
-        # STEP 1: QUALITY FILTER (Performance)
-        # -----------------------------------------
-        perf = get_performance(stock)
-        
-        # Handle None (missing) vs empty dict vs valid data
-        if perf is None:
-            if settings.ALLOW_UNKNOWN_STOCKS:
-                log.debug(f"{stock}: Allowing unknown stock")
-            else:
-                log.debug(f"{stock}: Skipping - no performance data")
-                continue
-        else:
-            include, reason = should_include_stock(stock, perf)
-            if not include:
-                log.debug(f"{stock}: Skipping - {reason}")
-                continue
-
-        result = scan_stock(stock)
-
-        # -----------------------------------------
-        # STEP 2: MOMENTUM FILTER
-        # -----------------------------------------
-        if result and passes_momentum_filter(result["change_pct"], result["score"]):
-            results.append(result)
-
-    # -----------------------------------------
-    # SORT BY SCORE
-    # -----------------------------------------
-
-    results = sorted(
-
-        results,
-
-        key=lambda x: x["score"],
-
-        reverse=True
-
-    )
-
-    # -----------------------------------------
-    # OUTPUT
-    # -----------------------------------------
-
-    print("\n🔥 TOP MOMENTUM STOCKS 🔥\n")
-
-    if not results:
-
-        print(
-            "No strong momentum stocks found."
-        )
-
-    else:
-
-        for r in results:
-
-            print(
-
-                f"{r['symbol']} | "
-
-                f"₹{r['close']} | "
-
-                f"RSI={r['rsi']} | "
-
-                f"RVOL={r['rel_volume']} | "
-
-                f"Move={r['change_pct']}% | "
-
-                f"Trend={r['trend_strength']} | "
-
-                f"Score={r['score']}"
-
-            )
+# For backward compatibility
+WATCHLIST = [s.replace("-EQ", "") for s in settings.WATCHLIST]

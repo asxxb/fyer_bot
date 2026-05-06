@@ -1,7 +1,6 @@
 {
-    "bot_status": "RUNNING",
-    "capital": 1001.9499999999998,
-    "daily_pnl": 1.9499999999999993,
-    "active_trade": "NONE",
-    "last_update": "2026-05-05 23:38:02.213633"
+  "bot_status": "RUNNING",
+  "capital": 1000.0,
+  "active_trade": "SBIN-EQ",
+  "last_update": "2026-05-06T11:20:39.258430"
 }

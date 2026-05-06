@@ -120,22 +120,26 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 
 WATCHLIST = [
-
-    "SBIN-EQ",
-    "NHPC-EQ",
-    "SUZLON-EQ",
-    "YESBANK-EQ",
-    "IDFCFIRSTB-EQ",
-    "UCOBANK-EQ",
+    # CORE (ALWAYS TRACK)
     "IREDA-EQ",
     "RVNL-EQ",
-    "NBCC-EQ",
     "IRFC-EQ",
-    "PNB-EQ",
-    "BANKBARODA-EQ",
+    "SUZLON-EQ",
+    # HIGH MOMENTUM ADDITIONS
+    "NBCC-EQ",
+    "JIOFIN-EQ",
     "SAIL-EQ",
-    "JIOFIN-EQ"
-
+    # POWER / INFRA
+    "TATAPOWER-EQ",
+    "NHPC-EQ",
+    "ADANIPOWER-EQ",
+    # BANKING (ONLY ACTIVE ONES)
+    "IDFCFIRSTB-EQ",
+    "YESBANK-EQ",
+    "UCOBANK-EQ",
+    "PNB-EQ",
+    # OPTIONAL (ONLY IF ACTIVE)
+    "SBIN-EQ",
 ]
 
 FINNHUB_API_KEY = os.getenv(
