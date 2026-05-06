@@ -267,13 +267,28 @@ class FyersBroker:
     def get_ltp(self, symbol: str = None, exchange: str = None) -> Optional[float]:
 
         sym = symbol or settings.SYMBOL
+        
+        # Try live tick first
         tick_ltp = self.get_live_tick(sym)
-
         if tick_ltp:
             return tick_ltp
 
+        # Try quote API
         q = self.get_quote(sym, exchange)
-        return q["ltp"] if q else None
+        if q and q.get("ltp"):
+            return q["ltp"]
+        
+        # Fallback: Get LTP from candles
+        try:
+            df = self.get_candles(symbol=sym, lookback_days=1)
+            if df is not None and len(df) > 0:
+                ltp = float(df.iloc[-1]["close"])
+                log.info(f"Using candle close as LTP for {sym}: {ltp}")
+                return ltp
+        except Exception as e:
+            log.error(f"Fallback LTP error: {e}")
+        
+        return None
 
     def get_candles(
         self,
