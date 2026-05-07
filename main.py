@@ -53,6 +53,16 @@ def check_mode():
         return
     
     if not broker.login():
+        # Check if token expired
+        if "expired" in str(broker.access_token).lower() or not broker.refresh_token:
+            log.info("Token expired. Generating new auth URL...")
+            broker.generate_auth_url()
+            log.info("Steps:")
+            log.info("  1. Open the URL above in your browser")
+            log.info("  2. Login and authorize")
+            log.info("  3. Copy the 'code' from redirect URL")
+            log.info("  4. Run: python main.py --login <code>")
+            return
         log.error("❌ Login failed. Check FYERS credentials.")
         sys.exit(1)
     
@@ -91,9 +101,13 @@ def run_api():
     
     # Start bot in background thread
     def run_bot_thread():
+        from core.broker import FyersBroker
+        broker = FyersBroker()
+        broker.start_token_scheduler()
+        _write_status("RUNNING", settings.SYMBOL)
+
         from core.engine import TradingEngine
         engine = TradingEngine()
-        _write_status("RUNNING", settings.SYMBOL)
 
         # Send telegram start message
         telegram.send(
@@ -121,6 +135,10 @@ def run_api():
 
 
 def run_bot():
+
+    from core.broker import FyersBroker
+    broker = FyersBroker()
+    broker.start_token_scheduler()
 
     from core.engine import TradingEngine
 

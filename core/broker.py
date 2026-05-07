@@ -8,10 +8,12 @@ position management, and market data.
 
 import time
 import json
+import os
 import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 from typing import Optional
+import threading
 
 import websocket
 
@@ -19,6 +21,8 @@ from config import settings
 from utils.logger import get_logger
 
 log = get_logger()
+
+TOKEN_FILE = "data/tokens.json"
 
 IST = pytz.timezone("Asia/Kolkata")
 
@@ -44,6 +48,8 @@ class FyersBroker:
         self.redirect_uri = settings.FYERS_REDIRECT_URI
         self.access_token = settings.FYERS_ACCESS_TOKEN
         self.refresh_token = None
+
+        self._load_tokens()
 
         self.logged_in = False
 
@@ -109,6 +115,8 @@ class FyersBroker:
                     self.refresh_token = response.get("refresh_token", "")
                     self.session.set_token(self.access_token)
                     
+                    self._save_tokens()
+                    
                     log.info(f"Access token saved")
                 else:
                     log.error(f"Token generation failed: {response}")
@@ -129,10 +137,24 @@ class FyersBroker:
                 self.logged_in = True
                 log.info("Login successful")
                 log.info(f"Profile: {profile.get('d', {}).get('name', 'User')}")
-                # Skip WebSocket - use REST API for quotes
                 log.info("Using REST API for market data")
                 return True
             else:
+                error_code = profile.get("code", 0)
+                error_msg = profile.get("message", "")
+                
+                # Token expired - try refresh token
+                if error_code in [-8, 403, 401] or "expired" in error_msg.lower():
+                    log.info("Access token expired, trying refresh...")
+                    if self._refresh_access_token():
+                        # Retry login with new token
+                        self.fyers.access_token = self.access_token
+                        profile = self.fyers.get_profile()
+                        if profile.get("s") == "ok":
+                            self.logged_in = True
+                            log.info("Login successful (via refresh token)")
+                            return True
+                
                 log.error(f"Profile fetch failed: {profile}")
                 return False
 
@@ -144,6 +166,133 @@ class FyersBroker:
             import traceback
             log.error(traceback.format_exc())
             return False
+
+    def _load_tokens(self):
+        """Load tokens from file."""
+        if os.path.exists(TOKEN_FILE):
+            try:
+                with open(TOKEN_FILE, "r") as f:
+                    data = json.load(f)
+                    self.access_token = data.get("access_token", self.access_token)
+                    self.refresh_token = data.get("refresh_token")
+                    log.info("Tokens loaded from file")
+            except Exception as e:
+                log.warning(f"Failed to load tokens: {e}")
+
+    def _save_tokens(self):
+        """Save tokens to file."""
+        os.makedirs("data", exist_ok=True)
+        try:
+            with open(TOKEN_FILE, "w") as f:
+                json.dump({
+                    "access_token": self.access_token,
+                    "refresh_token": self.refresh_token
+                }, f, indent=2)
+            log.info("Tokens saved")
+        except Exception as e:
+            log.warning(f"Failed to save tokens: {e}")
+
+    def _refresh_access_token(self) -> bool:
+        """Refresh the access token using refresh token."""
+        if not self.refresh_token:
+            log.warning("No refresh token available")
+            return False
+
+        try:
+            from fyers_apiv3 import fyersModel
+
+            self.session = fyersModel.SessionModel(
+                client_id=self.app_id,
+                secret_key=self.secret_id,
+                redirect_uri=self.redirect_uri,
+                response_type="code",
+                grant_type="refresh_token"
+            )
+
+            self.session.set_token(self.refresh_token)
+            response = self.session.generate_token()
+
+            log.info(f"Token refresh response: {response}")
+
+            if response.get("s") == "ok" or response.get("code") == 200:
+                self.access_token = response.get("access_token", "")
+                new_refresh = response.get("refresh_token")
+                if new_refresh:
+                    self.refresh_token = new_refresh
+
+                self._save_tokens()
+
+                if self.fyers:
+                    self.fyers.access_token = self.access_token
+
+                log.info("Access token refreshed automatically")
+                return True
+            else:
+                log.error(f"Token refresh failed: {response}")
+                return False
+
+        except Exception as e:
+            log.error(f"Token refresh error: {e}")
+            return False
+
+    def check_and_refresh_token(self) -> bool:
+        """Check if token is valid and refresh if needed. Returns True if valid."""
+        if not self.fyers:
+            return False
+
+        try:
+            profile = self.fyers.get_profile()
+
+            if profile.get("s") == "ok":
+                return True
+
+            error_code = profile.get("code", 0)
+            if error_code in [403, 401, 910]:
+                log.warning(f"Token expired (code {error_code}), refreshing...")
+                return self._refresh_access_token()
+
+            return False
+
+        except Exception as e:
+            error_str = str(e)
+            if "expired" in error_str.lower() or "403" in error_str or "401" in error_str:
+                log.warning(f"Token error detected, refreshing...")
+                return self._refresh_access_token()
+            return False
+
+    def _token_refresh_worker(self):
+        """Background worker for scheduled daily token refresh."""
+        while True:
+            try:
+                now = datetime.now(IST)
+                target_hour = 8
+                target_minute = 0
+                
+                next_run = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+                if now >= next_run:
+                    next_run += timedelta(days=1)
+                
+                wait_seconds = (next_run - now).total_seconds()
+                log.info(f"Token scheduler: Next refresh in {wait_seconds/3600:.1f} hours")
+                time.sleep(wait_seconds)
+                
+                if self._refresh_access_token():
+                    self._save_tokens()
+                    from utils.telegram import telegram
+                    telegram.send("🔄 Token refreshed automatically (daily)")
+                    log.info("Daily token refresh completed")
+                else:
+                    log.error("Daily token refresh failed")
+                    
+            except Exception as e:
+                log.error(f"Token scheduler error: {e}")
+                time.sleep(60)
+
+    def start_token_scheduler(self):
+        """Start background thread for daily token refresh."""
+        scheduler_thread = threading.Thread(target=self._token_refresh_worker, daemon=True)
+        scheduler_thread.start()
+        log.info("Token scheduler started (daily refresh at 8:00 AM)")
 
     def _start_websocket(self):
         # WebSocket disabled - using REST API instead
@@ -239,6 +388,8 @@ class FyersBroker:
             log.error("Not logged in")
             return None
 
+        self.check_and_refresh_token()
+
         sym = symbol or settings.SYMBOL
 
         try:
@@ -297,6 +448,8 @@ class FyersBroker:
         interval: int = None,
         lookback_days: int = 5
     ) -> pd.DataFrame:
+
+        self.check_and_refresh_token()
 
         sym = symbol or settings.SYMBOL
         ivl = interval or settings.CANDLE_INTERVAL
@@ -390,6 +543,8 @@ class FyersBroker:
 
         if not self.fyers:
             return {"success": False, "message": "Not logged in"}
+
+        self.check_and_refresh_token()
 
         side_map = {"BUY": 1, "SELL": 2}
         order_type_map = {"MKT": 2, "LIMIT": 1}
@@ -561,6 +716,8 @@ class FyersBroker:
         if not self.fyers:
             return []
 
+        self.check_and_refresh_token()
+
         try:
             response = self.fyers.positions()
 
@@ -594,6 +751,8 @@ class FyersBroker:
         if not self.fyers:
             return []
 
+        self.check_and_refresh_token()
+
         try:
             response = self.fyers.orderbook()
 
@@ -609,6 +768,8 @@ class FyersBroker:
 
         if not self.fyers:
             return {}
+
+        self.check_and_refresh_token()
 
         try:
             response = self.fyers.funds()
