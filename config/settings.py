@@ -65,10 +65,11 @@ RSI_OVERBOUGHT      = _get("RSI_OVERBOUGHT",      default="70",    cast=float)
 RSI_OVERSOLD        = _get("RSI_OVERSOLD",        default="30",    cast=float)
 ATR_PERIOD          = _get("ATR_PERIOD",          default="14",    cast=int)
 ATR_MULTIPLIER      = _get("ATR_MULTIPLIER",      default="1.5",   cast=float)
-BREAKEVEN_PCT       = _get("BREAKEVEN_PCT",     default="0.3",   cast=float)  # Move to breakeven at this profit %
+BREAKEVEN_PCT       = _get("BREAKEVEN_PCT",     default="5.0",   cast=float)  # Disabled - let trailing do the work
 TRAIL_FAST_MULT     = _get("TRAIL_FAST_MULT",   default="0.8",   cast=float)  # Tight trailing multiplier
 TRAIL_SLOW_MULT     = _get("TRAIL_SLOW_MULT",   default="1.2",   cast=float)  # Normal trailing multiplier
 TRAIL_TIGHTEN_PCT   = _get("TRAIL_TIGHTEN_PCT",default="1.0",   cast=float)  # Profit % to activate tight trailing
+VWAP_DEV_THRESHOLD   = _get("VWAP_DEV_THRESHOLD",default="0.005", cast=float)  # Max % deviation from VWAP to allow trade
 TRAIL_ATR_MULT      = _get("TRAIL_ATR_MULT",    default="1.0",   cast=float)  # Legacy - kept for compatibility
 TRAIL_ACTIVATE_PCT  = _get("TRAIL_ACTIVATE_PCT",default="0.3",  cast=float)  # Legacy - kept for compatibility
 CANDLE_INTERVAL     = _get("CANDLE_INTERVAL",     default="5",     cast=int)
@@ -120,26 +121,40 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 
 WATCHLIST = [
-    # CORE (ALWAYS TRACK)
-    "IREDA-EQ",
-    "RVNL-EQ",
-    "IRFC-EQ",
-    "SUZLON-EQ",
-    # HIGH MOMENTUM ADDITIONS
-    "NBCC-EQ",
-    "JIOFIN-EQ",
-    "SAIL-EQ",
-    # POWER / INFRA
-    "TATAPOWER-EQ",
-    "NHPC-EQ",
-    "ADANIPOWER-EQ",
-    # BANKING (ONLY ACTIVE ONES)
-    "IDFCFIRSTB-EQ",
-    "YESBANK-EQ",
-    "UCOBANK-EQ",
-    "PNB-EQ",
-    # OPTIONAL (ONLY IF ACTIVE)
+    # Banking
     "SBIN-EQ",
+    "HDFCBANK-EQ",
+    "ICICIBANK-EQ",
+    "YESBANK-EQ",
+    "PNB-EQ",
+    "BANKBARODA-EQ",
+    "UCOBANK-EQ",
+    "IDFCFIRSTB-EQ",
+    "KOTAKBANK-EQ",
+    "AXISBANK-EQ",
+    # Finance
+    "BAJFINANCE-EQ",
+    "JIOFIN-EQ",
+    "IRFC-EQ",
+    "LICHSGFIN-EQ",
+    # Power
+    "NTPC-EQ",
+    "NHPC-EQ",
+    "SUZLON-EQ",
+    "TATAPOWER-EQ",
+    "ADANIPOWER-EQ",
+    # Railway & Infrastructure
+    "RVNL-EQ",
+    "NBCC-EQ",
+    "IRCON-EQ",
+    # Steel & Metal
+    "SAIL-EQ",
+    "TATASTEEL-EQ",
+    "JSWSTEEL-EQ",
+    # Others
+    "IREDA-EQ",
+    "RELIANCE-EQ",
+    "ADANIENSOL-EQ",
 ]
 
 FINNHUB_API_KEY = os.getenv(
